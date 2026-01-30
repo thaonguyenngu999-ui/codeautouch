@@ -1,0 +1,77 @@
+{
+  "name": "autotouch-builder",
+  "version": "1.0.0",
+  "description": "Visual AutoTouch Script Builder",
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron": "vite build && electron .",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build:exe": "vite build && electron-builder"
+  },
+  "keywords": [
+    "autotouch",
+    "automation",
+    "ios",
+    "lua"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.2"
+  },
+  "dependencies": {
+    "@novnc/novnc": "^1.6.0",
+    "@xyflow/react": "^12.4.0",
+    "dagre": "^0.8.5",
+    "dotenv": "^17.2.3",
+    "form-data": "^4.0.5",
+    "node-fetch": "^3.3.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-vnc": "^3.2.0",
+    "ws": "^8.19.0",
+    "zustand": "^5.0.3"
+  },
+  "build": {
+    "appId": "com.autotouch.builder",
+    "productName": "AutoTouch Builder",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "public/icon.png"
+    }
+  }
+}
