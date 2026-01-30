@@ -74,30 +74,30 @@ function generateTouchCode(node, data, indent, context = {}) {
                 if (data.count && data.count > 1) {
                     code += `${indent}for i = 1, ${data.count} do\n`;
                     code += `${indent}    touchDown(1, ${varName}[1][1], ${varName}[1][2]);\n`;
-                    code += `${indent}    usleep(80000);\n`;
+                    code += `${indent}    usleep(math.random(100000, 200000));\n`;
                     code += `${indent}    touchUp(1, ${varName}[1][1], ${varName}[1][2]);\n`;
-                    code += `${indent}    usleep(200000);\n`;
+                    code += `${indent}    usleep(math.random(500000, 1500000));\n`;
                     code += `${indent}end\n`;
-                    code += `${indent}usleep(500000);\n`;
+                    code += `${indent}usleep(math.random(2000000, 10000000));\n`;
                 } else {
                     code += `${indent}touchDown(1, ${varName}[1][1], ${varName}[1][2]);\n`;
-                    code += `${indent}usleep(80000);\n`;
+                    code += `${indent}usleep(math.random(100000, 200000));\n`;
                     code += `${indent}touchUp(1, ${varName}[1][1], ${varName}[1][2]);\n`;
-                    code += `${indent}usleep(500000);\n`;
+                    code += `${indent}usleep(math.random(2000000, 10000000));\n`;
                 }
             } else if (data.count && data.count > 1) {
                 code += `${indent}for i = 1, ${data.count} do\n`;
                 code += `${indent}    touchDown(1, ${data.x || 0}, ${data.y || 0});\n`;
-                code += `${indent}    usleep(80000);\n`;
+                code += `${indent}    usleep(math.random(100000, 200000));\n`;
                 code += `${indent}    touchUp(1, ${data.x || 0}, ${data.y || 0});\n`;
-                code += `${indent}    usleep(200000);\n`;
+                code += `${indent}    usleep(math.random(500000, 1500000));\n`;
                 code += `${indent}end\n`;
-                code += `${indent}usleep(500000);\n`;
+                code += `${indent}usleep(math.random(2000000, 10000000));\n`;
             } else {
                 code += `${indent}touchDown(1, ${data.x || 0}, ${data.y || 0});\n`;
-                code += `${indent}usleep(80000);\n`;
+                code += `${indent}usleep(math.random(100000, 200000));\n`;
                 code += `${indent}touchUp(1, ${data.x || 0}, ${data.y || 0});\n`;
-                code += `${indent}usleep(500000);\n`;
+                code += `${indent}usleep(math.random(2000000, 10000000));\n`;
             }
             break;
 
