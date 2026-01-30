@@ -47,51 +47,11 @@ end
 `;
 }
 
-// Helper: Color matching with tolerance
-function generateColorToleranceHelper() {
-    return `-- Helper: Color matching with tolerance
-function isColorSimilar(c1, c2, diff)
-    local r1, g1, b1 = intToRgb(c1)
-    local r2, g2, b2 = intToRgb(c2)
-    return math.abs(r1-r2) <= diff and math.abs(g1-g2) <= diff and math.abs(b1-b2) <= diff
-end
-
-function findColorsTolerance(colors, count, region, tolerance)
-    if #colors == 0 then return nil end
-    local diff = math.floor(255 * (100 - tolerance) / 100)
-    local anchor = colors[1]
-    
-    -- Find anchor points (using generic findColor with tolerance)
-    -- 7th arg is usually difference/tolerance
-    local candidates = findColor(anchor[1], 0, region, nil, nil, nil, diff)
-    
-    if not candidates then return nil end
-    
-    local results = {}
-    for i, p in ipairs(candidates) do
-        local x, y = p[1], p[2]
-        local match = true
-        for j = 2, #colors do
-            local target = colors[j]
-            -- target format: {color, dx, dy}
-            local tx, ty = x + target[2], y + target[3]
-            local c = getColor(tx, ty)
-            if not isColorSimilar(c, target[1], diff) then
-                match = false
-                break
-            end
-        end
-        if match then
-            table.insert(results, {x, y})
-            if count > 0 and #results >= count then break end
-        end
-    end
-    
-    if #results == 0 then return nil end
-    return results
-end
-
-`;
+// Helper: Convert tolerance percentage to diff value
+// tolerance 100% = exact match (diff=0), tolerance 90% = diff=25
+function toleranceToDiff(tolerance) {
+    if (tolerance === undefined || tolerance >= 100) return null;
+    return Math.floor(255 * (100 - tolerance) / 100);
 }
 
 // =====================================================
@@ -300,39 +260,32 @@ function generateColorCode(node, data, indent) {
             break;
         }
         case 'findColorsNode': {
-            if (data.tolerance !== undefined && data.tolerance < 100) {
-                // Use tolerance helper
-                const varName = data.variable || 'result';
-                code += `${indent}local ${varName} = findColorsTolerance(${data.colors || '{}'}, ${data.count !== undefined ? data.count : 0}, ${data.region || 'nil'}, ${data.tolerance});\n`;
-                code += `${indent}-- Matches: ${varName}[1][1] = x, ${varName}[1][2] = y\n`;
-            } else {
-                // Standard strict match
-                const args = [
-                    data.colors || '{}',
-                    data.count !== undefined ? data.count : 0,
-                    data.region || 'nil',
-                ];
+            // Use native findColors with diff parameter
+            // Signature: findColors(colors, count, region, debug, rightToLeft, bottomToTop, diff)
+            const diff = toleranceToDiff(data.tolerance);
+            const args = [
+                data.colors || '{}',
+                data.count !== undefined ? data.count : 0,
+                data.region || 'nil',
+            ];
 
-                // Only add optional args if they are set
-                if (data.debug || data.rightToLeft || data.bottomToTop) {
-                    args.push(data.debug ? 'true' : 'nil');
-                    if (data.rightToLeft || data.bottomToTop) {
-                        args.push(data.rightToLeft ? 'true' : 'nil');
-                        if (data.bottomToTop) {
-                            args.push(data.bottomToTop ? 'true' : 'nil');
-                        }
-                    }
+            // Add optional args if they are set or if we need diff
+            if (data.debug || data.rightToLeft || data.bottomToTop || diff !== null) {
+                args.push(data.debug ? 'true' : 'nil');
+                args.push(data.rightToLeft ? 'true' : 'nil');
+                args.push(data.bottomToTop ? 'true' : 'nil');
+                if (diff !== null) {
+                    args.push(diff);
                 }
-
-                // Trim trailing nils logic being generic
-                while (args.length > 1 && args[args.length - 1] === 'nil') {
-                    args.pop();
-                }
-
-                const varName = data.variable || 'result';
-                code += `${indent}local ${varName} = findColors(${args.join(', ')});\n`;
-                code += `${indent}-- Matches: ${varName}[1][1] = x, ${varName}[1][2] = y\n`;
             }
+
+            // Trim trailing nils (but keep diff if present)
+            while (args.length > 3 && args[args.length - 1] === 'nil') {
+                args.pop();
+            }
+
+            const varName = data.variable || 'result';
+            code += `${indent}local ${varName} = findColors(${args.join(', ')});\n`;
             break;
         }
         case 'findImageNode': {
@@ -601,14 +554,12 @@ export function generateLuaFromNodes(nodes, edges) {
     const needsSwipe = nodeTypes.has('swipeNode');
     const needsKeyPress = ['pressHomeNode', 'pressPowerNode', 'pressVolumeUpNode', 'pressVolumeDownNode', 'unlockScreenNode']
         .some(t => nodeTypes.has(t));
-    const needsTolerance = nodes.some(n => n.type === 'findColorsNode' && n.data?.tolerance !== undefined && n.data.tolerance < 100);
 
     let script = '';
     // Helper functions (if needed)
     if (needsTap) script += generateTapHelper();
     if (needsSwipe) script += generateSwipeHelper();
     if (needsKeyPress) script += generateKeyPressHelper();
-    if (needsTolerance) script += generateColorToleranceHelper();
     script += '-- ============================================\n';
     script += '-- AutoTouch Script\n';
     script += '-- Generated by AutoTouch Builder\n';
