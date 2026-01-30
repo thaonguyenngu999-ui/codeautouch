@@ -297,21 +297,21 @@ ipcMain.handle('get-device-screen', async (event, deviceIp) => {
 // Get color from iPhone by running a small Lua script
 ipcMain.handle('get-color-on-device', async (event, { deviceIp, x, y }) => {
     const apiPort = 8080;
-    const tempScriptPath = '/var/mobile/Library/AutoTouch/Scripts/.get_color_temp.lua';
-    const resultFilePath = '/var/mobile/Library/AutoTouch/Scripts/.color_result.txt';
+    const tempScriptPath = '/Vcuto/.get_color.lua';
+    const resultFilePath = '/Vcuto/.color_result.lua';
 
     try {
         // Step 1: Create Lua script to get color and write to file
         const luaScript = `
 local c = getColor(${Math.round(x)}, ${Math.round(y)})
-local f = io.open("${resultFilePath}", "w")
-f:write(tostring(c))
+local f = io.open("/var/mobile/Library/AutoTouch/Scripts${resultFilePath}", "w")
+f:write("return " .. tostring(c))
 f:close()
 `;
 
         console.log(`🎨 Getting color at (${x}, ${y}) via Lua script...`);
 
-        // Step 2: Upload the temp script
+        // Step 2: Upload the temp script (use same method as regular scripts)
         const createUrl = `http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(tempScriptPath)}`;
         await fetch(createUrl).catch(() => {});
 
@@ -336,21 +336,21 @@ f:close()
             throw new Error('Failed to run color script');
         }
 
-        // Step 4: Wait a bit for script to complete
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Step 4: Wait for script to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Step 5: Read the result file
-        const readUrl = `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(resultFilePath)}`;
+        // Step 5: Read the result file content
+        const readUrl = `http://${deviceIp}:${apiPort}/file/content?path=${encodeURIComponent(resultFilePath)}`;
         const readRes = await fetch(readUrl);
         const colorText = await readRes.text();
 
-        // Parse the color (it's an integer)
-        const colorInt = parseInt(colorText.trim(), 10);
-
-        if (isNaN(colorInt)) {
-            throw new Error(`Invalid color value: ${colorText}`);
+        // Parse: file contains "return 12345678"
+        const match = colorText.match(/return\s+(\d+)/);
+        if (!match) {
+            throw new Error(`Invalid color result: ${colorText}`);
         }
 
+        const colorInt = parseInt(match[1], 10);
         const hex = '0x' + (colorInt.toString(16).toUpperCase().padStart(6, '0'));
         console.log(`🎨 Got color: ${hex} (${colorInt})`);
 
