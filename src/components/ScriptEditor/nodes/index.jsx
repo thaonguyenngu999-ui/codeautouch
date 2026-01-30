@@ -565,7 +565,7 @@ export function FindColorsNode({ id, data, selected }) {
         >
             <TextAreaField label="Màu {{color,dx,dy}, ...}" value={data.colors} placeholder="{{0xFF0000,0,0}, {0x00FF00,10,10}}" onChange={v => updateData('colors', v)} />
             <NumberField label="Số kết quả (0=tất cả)" value={data.count || 0} min={0} onChange={v => updateData('count', v)} />
-            <NumberField label="Độ chính xác (0-100%)" value={data.tolerance !== undefined ? data.tolerance : 90} min={0} max={100} onChange={v => updateData('tolerance', v)} />
+            <NumberField label="Độ chính xác (0-100%)" value={data.tolerance !== undefined ? data.tolerance : 100} min={0} max={100} onChange={v => updateData('tolerance', v)} />
             <TextField label="Vùng tìm" value={data.region} placeholder="{x, y, width, height}" onChange={v => updateData('region', v)} />
             <div className="node-options">
                 <CheckboxField label="Debug" checked={data.debug} onChange={v => updateData('debug', v)} />
