@@ -823,9 +823,12 @@ export function generateLuaFromNodes(nodes, edges) {
                 code += generateNodeCode(node, data, context);
 
                 // Process connected nodes
+                // IMPORTANT: Don't pass colorResultVar to child nodes
+                // colorResultVar should only apply to the FIRST tap directly connected from findColors
+                const childContext = (node.type === 'tapNode' && context.colorResultVar) ? {} : context;
                 const connections = adjacencyMap[nodeId] || [];
                 for (const conn of connections) {
-                    code += processNode(conn.target, context);
+                    code += processNode(conn.target, childContext);
                 }
                 return code;
         }
