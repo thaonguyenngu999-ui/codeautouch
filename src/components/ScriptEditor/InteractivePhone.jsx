@@ -248,15 +248,19 @@ function InteractivePhone({ onTap, onSwipe, onColorCapture, onCoordCapture, onDe
             height: '100%',
             background: '#12121a',
             borderLeft: '1px solid #333',
-            minWidth: 280,
+            minWidth: 320,
+            maxWidth: 400,
         }}>
-            {/* Header */}
+            {/* Header - 20% with scroll */}
             <div style={{
-                padding: '12px 15px',
+                height: '20%',
+                minHeight: 120,
+                padding: '10px 12px',
                 borderBottom: '1px solid #333',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 10,
+                gap: 8,
+                overflowY: 'auto',
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9em' }}>📱 iPhone Live</span>
@@ -420,28 +424,25 @@ function InteractivePhone({ onTap, onSwipe, onColorCapture, onCoordCapture, onDe
                 )}
             </div>
 
-            {/* VNC Screen - Fixed size with scroll */}
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <div
-                    ref={containerRef}
-                    style={{
-                        position: 'relative',
-                        cursor: isCapturing ? 'crosshair' : 'default',
-                        width: '100%',
-                        // Fixed height based on device aspect ratio (default iPhone 750x1334)
-                        height: Math.round(280 * (screenSize.height / screenSize.width)),
-                        minHeight: 500,
-                    }}
-                >
-                    {vncUrl ? (
-                        <VncScreen
-                            url={vncUrl}
-                            scaleViewport={true}
-                            background="#000000"
-                            style={{ width: '100%', height: '100%' }}
-                            qualityLevel={9}
-                            compressionLevel={0}
-                        />
+            {/* VNC Screen - Fixed 80% height */}
+            <div
+                ref={containerRef}
+                style={{
+                    height: '80%',
+                    position: 'relative',
+                    cursor: isCapturing ? 'crosshair' : 'default',
+                    background: '#000',
+                }}
+            >
+                {vncUrl ? (
+                    <VncScreen
+                        url={vncUrl}
+                        scaleViewport={true}
+                        background="#000000"
+                        style={{ width: '100%', height: '100%' }}
+                        qualityLevel={9}
+                        compressionLevel={0}
+                    />
                 ) : (
                     <div style={{
                         height: '100%',
@@ -499,7 +500,6 @@ function InteractivePhone({ onTap, onSwipe, onColorCapture, onCoordCapture, onDe
                         }
                     </div>
                 )}
-                </div>
             </div>
 
             {/* Current Device Info */}
