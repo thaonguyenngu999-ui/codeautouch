@@ -420,25 +420,28 @@ function InteractivePhone({ onTap, onSwipe, onColorCapture, onCoordCapture, onDe
                 )}
             </div>
 
-            {/* VNC Screen */}
-            <div
-                ref={containerRef}
-                style={{
-                    flex: 1,
-                    position: 'relative',
-                    cursor: isCapturing ? 'crosshair' : 'default',
-                    overflow: 'hidden',
-                }}
-            >
-                {vncUrl ? (
-                    <VncScreen
-                        url={vncUrl}
-                        scaleViewport={true}
-                        background="#000000"
-                        style={{ width: '100%', height: '100%' }}
-                        qualityLevel={9}
-                        compressionLevel={0}
-                    />
+            {/* VNC Screen - Fixed size with scroll */}
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                <div
+                    ref={containerRef}
+                    style={{
+                        position: 'relative',
+                        cursor: isCapturing ? 'crosshair' : 'default',
+                        width: '100%',
+                        // Fixed height based on device aspect ratio (default iPhone 750x1334)
+                        height: Math.round(280 * (screenSize.height / screenSize.width)),
+                        minHeight: 500,
+                    }}
+                >
+                    {vncUrl ? (
+                        <VncScreen
+                            url={vncUrl}
+                            scaleViewport={true}
+                            background="#000000"
+                            style={{ width: '100%', height: '100%' }}
+                            qualityLevel={9}
+                            compressionLevel={0}
+                        />
                 ) : (
                     <div style={{
                         height: '100%',
@@ -496,6 +499,7 @@ function InteractivePhone({ onTap, onSwipe, onColorCapture, onCoordCapture, onDe
                         }
                     </div>
                 )}
+                </div>
             </div>
 
             {/* Current Device Info */}
