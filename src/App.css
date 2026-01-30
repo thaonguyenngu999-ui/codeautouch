@@ -934,68 +934,59 @@ select.node-input {
   background: transparent;
 }
 
-/* ===== Turbo Style Handles ===== */
+/* ===== Turbo Style Handles - Pill/Button Shape ===== */
 .react-flow__handle {
-  width: 28px !important;
-  height: 28px !important;
-  border-radius: 50% !important;
-  border: 3px solid var(--turbo-bg) !important;
-  background: conic-gradient(from -160deg at 50% 50%,
-      #e92a67 0deg,
-      #a853ba 120deg,
-      #2a8af6 240deg,
-      #e92a67 360deg) !important;
+  width: 40px !important;
+  height: 14px !important;
+  border-radius: 7px !important;
+  border: 2px solid var(--turbo-bg) !important;
+  background: linear-gradient(90deg, #e92a67, #a853ba, #2a8af6) !important;
   box-shadow:
-    var(--turbo-shadow),
-    0 0 8px rgba(233, 42, 103, 0.4),
-    0 0 8px rgba(42, 138, 246, 0.4),
-    inset 0 0 4px rgba(255, 255, 255, 0.3) !important;
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-  cursor: crosshair !important;
-  animation: handlePulse 2s ease-in-out infinite !important;
-}
-
-@keyframes handlePulse {
-  0%, 100% {
-    box-shadow:
-      var(--turbo-shadow),
-      0 0 8px rgba(233, 42, 103, 0.4),
-      0 0 8px rgba(42, 138, 246, 0.4),
-      inset 0 0 4px rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    box-shadow:
-      var(--turbo-shadow),
-      0 0 15px rgba(233, 42, 103, 0.6),
-      0 0 15px rgba(42, 138, 246, 0.6),
-      inset 0 0 6px rgba(255, 255, 255, 0.5);
-  }
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 6px rgba(233, 42, 103, 0.4),
+    0 0 6px rgba(42, 138, 246, 0.4) !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
 }
 
 .react-flow__handle:hover {
-  transform: scale(1.3) !important;
-  animation: none !important;
+  transform: scaleX(1.15) !important;
   box-shadow:
-    0 0 20px rgba(42, 138, 246, 0.9),
-    0 0 20px rgba(233, 42, 103, 0.9),
-    0 0 30px rgba(168, 83, 186, 0.6),
-    inset 0 0 8px rgba(255, 255, 255, 0.6) !important;
+    0 2px 12px rgba(0, 0, 0, 0.4),
+    0 0 12px rgba(233, 42, 103, 0.7),
+    0 0 12px rgba(42, 138, 246, 0.7) !important;
 }
 
 .react-flow__handle-top {
-  top: -16px !important;
+  top: -9px !important;
 }
 
 .react-flow__handle-bottom {
-  bottom: -16px !important;
+  bottom: -9px !important;
 }
 
 .react-flow__handle-left {
-  left: -16px !important;
+  left: -22px !important;
+  width: 14px !important;
+  height: 40px !important;
+  border-radius: 7px !important;
+  background: linear-gradient(180deg, #e92a67, #a853ba, #2a8af6) !important;
+}
+
+.react-flow__handle-left:hover {
+  transform: scaleY(1.15) !important;
 }
 
 .react-flow__handle-right {
-  right: -16px !important;
+  right: -22px !important;
+  width: 14px !important;
+  height: 40px !important;
+  border-radius: 7px !important;
+  background: linear-gradient(180deg, #e92a67, #a853ba, #2a8af6) !important;
+}
+
+.react-flow__handle-right:hover {
+  transform: scaleY(1.15) !important;
 }
 
 /* ===== Turbo Style Edges ===== */
