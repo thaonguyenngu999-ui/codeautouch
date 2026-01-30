@@ -59,13 +59,33 @@ function toleranceToDiff(tolerance) {
 // =====================================================
 
 // ----- TOUCH NODES -----
-function generateTouchCode(node, data, indent) {
+// context: optional object with { colorResultVar } if tap is connected from findColors
+function generateTouchCode(node, data, indent, context = {}) {
     let code = '';
 
+    // Check if tap should use coordinates from findColors result
+    const useColorResult = context.colorResultVar;
 
     switch (node.type) {
         case 'tapNode':
-            if (data.count && data.count > 1) {
+            if (useColorResult) {
+                // Tap at color result position (result[1][1], result[1][2])
+                const varName = context.colorResultVar;
+                if (data.count && data.count > 1) {
+                    code += `${indent}for i = 1, ${data.count} do\n`;
+                    code += `${indent}    touchDown(1, ${varName}[1][1], ${varName}[1][2]);\n`;
+                    code += `${indent}    usleep(80000);\n`;
+                    code += `${indent}    touchUp(1, ${varName}[1][1], ${varName}[1][2]);\n`;
+                    code += `${indent}    usleep(200000);\n`;
+                    code += `${indent}end\n`;
+                    code += `${indent}usleep(500000);\n`;
+                } else {
+                    code += `${indent}touchDown(1, ${varName}[1][1], ${varName}[1][2]);\n`;
+                    code += `${indent}usleep(80000);\n`;
+                    code += `${indent}touchUp(1, ${varName}[1][1], ${varName}[1][2]);\n`;
+                    code += `${indent}usleep(500000);\n`;
+                }
+            } else if (data.count && data.count > 1) {
                 code += `${indent}for i = 1, ${data.count} do\n`;
                 code += `${indent}    touchDown(1, ${data.x || 0}, ${data.y || 0});\n`;
                 code += `${indent}    usleep(80000);\n`;
@@ -610,12 +630,13 @@ export function generateLuaFromNodes(nodes, edges) {
     const indent = () => '    '.repeat(indentLevel);
 
     // Generate code for each node type
-    const generateNodeCode = (node, data) => {
+    // context: optional object with { colorResultVar } for tap from findColors
+    const generateNodeCode = (node, data, context = {}) => {
         const ind = indent();
 
         // Touch nodes
         if (['tapNode', 'touchDownNode', 'touchMoveNode', 'touchUpNode', 'swipeNode', 'longPressNode', 'pinchNode'].includes(node.type)) {
-            return generateTouchCode(node, data, ind);
+            return generateTouchCode(node, data, ind, context);
         }
 
         // Key nodes
@@ -672,7 +693,8 @@ export function generateLuaFromNodes(nodes, edges) {
     };
 
     // Process node with graph traversal
-    const processNode = (nodeId) => {
+    // context: optional object with { colorResultVar } when inside found branch of findColors
+    const processNode = (nodeId, context = {}) => {
         if (!nodeId || processed.has(nodeId)) return '';
 
         const node = nodeMap[nodeId];
@@ -691,7 +713,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 // Process connected nodes
                 const ifConnections = adjacencyMap[nodeId] || [];
                 for (const conn of ifConnections) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}end\n`;
@@ -703,7 +725,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 // Then branch (default handle)
                 const thenConns = (adjacencyMap[nodeId] || []).filter(c => c.handle !== 'else');
                 for (const conn of thenConns) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}else\n`;
@@ -711,7 +733,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 // Else branch
                 const elseConns = (adjacencyMap[nodeId] || []).filter(c => c.handle === 'else');
                 for (const conn of elseConns) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}end\n`;
@@ -725,7 +747,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 indentLevel++;
                 const whileConns = adjacencyMap[nodeId] || [];
                 for (const conn of whileConns) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}end\n`;
@@ -737,7 +759,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 indentLevel++;
                 const forConns = adjacencyMap[nodeId] || [];
                 for (const conn of forConns) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}end\n`;
@@ -750,7 +772,7 @@ export function generateLuaFromNodes(nodes, edges) {
                 indentLevel++;
                 const foreachConns = adjacencyMap[nodeId] || [];
                 for (const conn of foreachConns) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 indentLevel--;
                 code += `${indent()}end\n`;
@@ -771,14 +793,17 @@ export function generateLuaFromNodes(nodes, edges) {
                     // Combine robust checks for both table (findColors/findImage) and number (findColor)
                     code += `${indent()}if (${varResult} and type(${varResult}) == "table" and #${varResult} > 0) or (${varResult} and type(${varResult}) == "number" and ${varResult} > -1) then\n`;
                     indentLevel++;
+                    // Pass colorResultVar context to found branch - tap nodes will use this
+                    const foundContext = { colorResultVar: varResult };
                     for (const conn of foundConns) {
-                        code += processNode(conn.target);
+                        code += processNode(conn.target, foundContext);
                     }
                     indentLevel--;
 
                     if (notFoundConns.length > 0) {
                         code += `${indent()}else\n`;
                         indentLevel++;
+                        // Not found branch - no color result context
                         for (const conn of notFoundConns) {
                             code += processNode(conn.target);
                         }
@@ -788,19 +813,19 @@ export function generateLuaFromNodes(nodes, edges) {
                 } else {
                     // Segue with default handle or any connection
                     for (const conn of searchConns) {
-                        code += processNode(conn.target);
+                        code += processNode(conn.target, context);
                     }
                 }
                 return code;
 
             default:
                 // Regular node - generate code and continue
-                code += generateNodeCode(node, data);
+                code += generateNodeCode(node, data, context);
 
                 // Process connected nodes
                 const connections = adjacencyMap[nodeId] || [];
                 for (const conn of connections) {
-                    code += processNode(conn.target);
+                    code += processNode(conn.target, context);
                 }
                 return code;
         }
