@@ -470,7 +470,7 @@ function ScriptEditorTab() {
                 type: 'findColorsNode',
                 position: { x: newX, y: newY },
                 selected: true,
-                data: { colors: colorsStr, region: 'nil', count: 0, variable: 'colorResult', tolerance: 100 },
+                data: { colors: colorsStr, region: 'nil', count: 0, variable: 'colorResult', tolerance: 90 },
             };
 
             // Logic nodes - use unique suffixes to prevent ID collision

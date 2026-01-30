@@ -294,31 +294,71 @@ ipcMain.handle('get-device-screen', async (event, deviceIp) => {
     }
 });
 
-// Get color from iPhone
+// Get color from iPhone by running a small Lua script
 ipcMain.handle('get-color-on-device', async (event, { deviceIp, x, y }) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    const apiPort = 8080;
+    const tempScriptPath = '/Vcuto/.get_color.lua';
+    const resultFilePath = '/Vcuto/.color_result.lua';
 
     try {
-        const apiPort = 8080;
-        const colorUrl = `http://${deviceIp}:${apiPort}/control/get_color?x=${x}&y=${y}`;
-        console.log(`🎨 Fetching color from: ${colorUrl}`);
+        // Step 1: Create Lua script to get color and write to file
+        const luaScript = `
+local c = getColor(${Math.round(x)}, ${Math.round(y)})
+local f = io.open("/var/mobile/Library/AutoTouch/Scripts${resultFilePath}", "w")
+f:write("return " .. tostring(c))
+f:close()
+`;
 
-        const response = await fetch(colorUrl, { signal: controller.signal });
-        const result = await response.json();
+        console.log(`🎨 Getting color at (${x}, ${y}) via Lua script...`);
 
-        clearTimeout(timeout);
+        // Step 2: Upload the temp script (use same method as regular scripts)
+        const createUrl = `http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(tempScriptPath)}`;
+        await fetch(createUrl).catch(() => {});
 
-        if (result.status === 'success') {
-            const colorInt = result.color;
-            const hex = '0x' + (colorInt.toString(16).toUpperCase().padStart(6, '0'));
-            return { success: true, color: hex, colorInt };
+        const updateUrl = `http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(tempScriptPath)}`;
+        const uploadRes = await fetch(updateUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `content=${encodeURIComponent(luaScript)}`,
+        });
+        const uploadResult = await uploadRes.json();
+
+        if (uploadResult.status !== 'success') {
+            throw new Error('Failed to upload color script');
         }
-        return { success: false, error: result.info || 'Unknown AutoTouch error' };
+
+        // Step 3: Run the script
+        const playUrl = `http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(tempScriptPath)}`;
+        const playRes = await fetch(playUrl);
+        const playResult = await playRes.json();
+
+        if (playResult.status !== 'success') {
+            throw new Error('Failed to run color script');
+        }
+
+        // Step 4: Wait for script to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 5: Read the result file content
+        const readUrl = `http://${deviceIp}:${apiPort}/file/content?path=${encodeURIComponent(resultFilePath)}`;
+        const readRes = await fetch(readUrl);
+        const colorText = await readRes.text();
+
+        // Parse: file contains "return 12345678"
+        const match = colorText.match(/return\s+(\d+)/);
+        if (!match) {
+            throw new Error(`Invalid color result: ${colorText}`);
+        }
+
+        const colorInt = parseInt(match[1], 10);
+        const hex = '0x' + (colorInt.toString(16).toUpperCase().padStart(6, '0'));
+        console.log(`🎨 Got color: ${hex} (${colorInt})`);
+
+        return { success: true, color: hex, colorInt };
+
     } catch (error) {
-        clearTimeout(timeout);
         console.error('Get color error:', error.message);
-        return { success: false, error: error.name === 'AbortError' ? 'Timeout' : error.message };
+        return { success: false, error: error.message };
     }
 });
 
