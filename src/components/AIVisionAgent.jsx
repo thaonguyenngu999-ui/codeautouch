@@ -341,7 +341,7 @@ touchUp(1, endX, endY)
                             const center = getBboxCenter(el.bbox);
                             elementsPrompt += `[${idx}] "${el.text || el.type || 'element'}" - center: (${center?.x}, ${center?.y})\n`;
                         });
-                        elementsPrompt += `\nNeu tap, hay tra ve "element_id" thay vi "x,y" truc tiep. VD: {"action":"tap","params":{"element_id":5}}`;
+                        elementsPrompt += `\nNeu tap, tra ve CA element_id VA x,y (de backup). VD: {"action":"tap","params":{"element_id":5,"x":375,"y":600}}`;
                         addMessage('system', `Tim thay ${detectedElements.length} UI elements`);
                     } else {
                         addMessage('system', `OmniParser khong detect duoc elements, dung coordinate truc tiep`);
@@ -385,13 +385,23 @@ touchUp(1, endX, endY)
                 if (useOmniParser && parsed.action === 'tap' && parsed.params?.element_id !== undefined) {
                     const elementId = parsed.params.element_id;
                     const element = detectedElements[elementId];
+                    console.log(`🔍 Element[${elementId}]:`, element);
+
                     if (element?.bbox) {
                         const center = getBboxCenter(element.bbox);
-                        if (center) {
+                        // Only use OmniParser coords if they're valid numbers
+                        if (center && !isNaN(center.x) && !isNaN(center.y) && center.x > 0 && center.y > 0) {
                             parsed.params.x = center.x;
                             parsed.params.y = center.y;
                             addMessage('system', `🎯 OmniParser: element[${elementId}] → (${center.x}, ${center.y})`);
+                        } else {
+                            console.warn(`⚠️ Invalid bbox center for element[${elementId}]:`, center, 'bbox:', element.bbox);
+                            addMessage('system', `⚠️ OmniParser bbox invalid, using Grok coordinates`);
+                            // Don't modify params - let Grok's coordinates be used
                         }
+                    } else {
+                        console.warn(`⚠️ Element[${elementId}] has no bbox:`, element);
+                        addMessage('system', `⚠️ Element has no bbox, using Grok coordinates`);
                     }
                 }
 
