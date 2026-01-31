@@ -12,6 +12,17 @@ export default function AIVisionAgent({ selectedDevice }) {
     const messagesEndRef = useRef(null);
     const abortRef = useRef(false);
 
+    // Vision model selection
+    const [selectedModel, setSelectedModel] = useState('gemini');
+    const availableModels = [
+        { value: 'gemini', label: 'Gemini (Recommended)' },
+        { value: 'gemini-fast', label: 'Gemini Fast' },
+        { value: 'claude', label: 'Claude' },
+        { value: 'claude-fast', label: 'Claude Fast' },
+        { value: 'openai', label: 'GPT-4 Vision' },
+        { value: 'grok', label: 'Grok' },
+    ];
+
     // Store image and device dimensions for coordinate scaling
     const [imageSize, setImageSize] = useState({ width: 750, height: 1334 });
     const [deviceSize, setDeviceSize] = useState({ width: 750, height: 1334 });
@@ -257,9 +268,9 @@ touchUp(1, endX, endY)
                 addMessage('system', `[${iteration}] Dang chup man hinh...`);
                 const screenshotData = await captureScreenshot();
 
-                // Step 2: Call Grok Vision
+                // Step 2: Call Vision API
                 setStatus('thinking');
-                addMessage('system', `[${iteration}] Grok dang phan tich...`);
+                addMessage('system', `[${iteration}] ${selectedModel.toUpperCase()} dang phan tich...`);
 
                 // Include screen dimensions in prompt so Grok knows exact coordinates
                 const screenWidth = screenshotData.width || 750;
@@ -277,6 +288,7 @@ touchUp(1, endX, endY)
                     screenshotBase64: screenshotData.base64,
                     userPrompt: promptWithDimensions,
                     imageFormat: screenshotData.format || 'jpeg',
+                    model: selectedModel,
                 });
 
                 if (!response.success) {
@@ -356,10 +368,30 @@ touchUp(1, endX, endY)
     return (
         <div className="ai-vision-agent">
             <div className="ai-header">
-                <h3>Grok Vision Agent</h3>
+                <h3>AI Vision Agent</h3>
                 <div className="ai-status-bar">
                     <span className={`status-dot ${selectedDevice ? 'online' : ''}`}></span>
                     <span>{selectedDevice?.ip || 'Chua ket noi'}</span>
+                    <select
+                        className="model-selector"
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        disabled={isRunning}
+                        style={{
+                            marginLeft: 10,
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            background: '#1a1a2e',
+                            color: '#fff',
+                            border: '1px solid #333',
+                            fontSize: '0.85em',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {availableModels.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
                     <span style={{ marginLeft: 10, opacity: 0.7, fontSize: '0.85em' }}>
                         IMG: {imageSize.width}x{imageSize.height} | DEV: {deviceSize.width}x{deviceSize.height}
                     </span>

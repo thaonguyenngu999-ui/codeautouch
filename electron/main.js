@@ -60,13 +60,14 @@ Lưu ý:
 - Nếu không chắc chắn, dùng action "wait" để đợi UI ổn định`;
 
 // IPC Handler for Vision API calls (supports Pollinations or xAI)
-ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [], imageFormat = 'jpeg' }) => {
+ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [], imageFormat = 'jpeg', model: requestedModel }) => {
     try {
         // Prefer Pollinations API if configured, fallback to xAI
         const usePollinations = !!POLLINATIONS_API_KEY;
         const apiKey = usePollinations ? POLLINATIONS_API_KEY : XAI_API_KEY;
         const apiUrl = usePollinations ? POLLINATIONS_API_URL : XAI_API_URL;
-        const model = usePollinations ? POLLINATIONS_MODEL : 'grok-2-vision-latest';
+        // Use requested model if provided, otherwise use env config or default
+        const model = requestedModel || (usePollinations ? POLLINATIONS_MODEL : 'grok-2-vision-latest');
 
         if (!apiKey) {
             return { success: false, error: 'No API key configured (set POLLINATIONS_API_KEY or XAI_API_KEY)' };
