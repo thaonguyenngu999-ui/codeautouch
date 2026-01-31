@@ -22,10 +22,11 @@ const POLLINATIONS_API_URL = 'https://gen.pollinations.ai/v1/chat/completions';
 // Available vision models: gemini, gemini-fast, claude, claude-fast, openai, openai-large, grok
 const POLLINATIONS_MODEL = process.env.POLLINATIONS_MODEL || 'gemini';
 
-// OmniParser configuration (for precise UI element detection)
-// Can use Replicate API or self-hosted endpoint
-const OMNIPARSER_API_URL = process.env.OMNIPARSER_API_URL || 'https://api.replicate.com/v1/predictions';
+// OmniParser / Florence-2 configuration (for precise UI element detection)
+// Default to localhost:8000 (local Florence-2 API)
+const OMNIPARSER_API_URL = process.env.OMNIPARSER_API_URL || 'http://localhost:8000';
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || '';
+console.log(`🔍 OmniParser URL: ${OMNIPARSER_API_URL}`);
 
 // System prompt for AI Vision Agent
 const VISION_SYSTEM_PROMPT = `Bạn là AI Vision Agent điều khiển iPhone qua AutoTouch.
