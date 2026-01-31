@@ -155,30 +155,81 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
             }
         }
 
-        // Lua script fallback (more reliable)
+        // Lua script fallback
         if (!response) {
             console.log(`📸 Using Lua fallback...`);
 
             const tempPath = '/var/mobile/Library/AutoTouch/Screenshots/_ai_temp.png';
             const scriptPath = '/var/mobile/Library/AutoTouch/Scripts/_ai_ss.lua';
 
-            // Upload & run screenshot script
+            // Step 1: Create and upload screenshot script
+            console.log(`📸 Step 1: Creating script at ${scriptPath}`);
             await fetch(`http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(scriptPath)}`).catch(() => {});
-            await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
+
+            const updateResp = await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `content=${encodeURIComponent(`screenshot("${tempPath}")`)}`,
             });
-            await fetch(`http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptPath)}`);
+            console.log(`📸 Step 1 result: ${updateResp.status}`);
 
-            // Wait then download
-            await new Promise(r => setTimeout(r, 800));
-            const dlUrl = `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempPath)}`;
-            console.log(`📸 Downloading from Lua...`);
-            const dlResp = await fetch(dlUrl);
-            if (dlResp.ok) {
-                response = dlResp;
-                console.log(`📸 Lua screenshot OK!`);
+            // Step 2: Run the script
+            console.log(`📸 Step 2: Running script...`);
+            const playResp = await fetch(`http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptPath)}`);
+            const playResult = await playResp.json().catch(() => ({}));
+            console.log(`📸 Step 2 result:`, playResult);
+
+            // Step 3: Wait for screenshot to complete
+            await new Promise(r => setTimeout(r, 1000));
+
+            // Step 4: Try multiple download methods
+            console.log(`📸 Step 3: Downloading screenshot...`);
+
+            // Method 1: /file/download (binary)
+            const downloadUrls = [
+                `http://${deviceIp}:${apiPort}/file/download?path=${encodeURIComponent(tempPath)}`,
+                `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempPath)}`,
+                `http://${deviceIp}:${apiPort}${tempPath}`,
+            ];
+
+            for (const dlUrl of downloadUrls) {
+                console.log(`📸 Trying download: ${dlUrl}`);
+                try {
+                    const dlResp = await fetch(dlUrl);
+                    if (dlResp.ok) {
+                        const contentType = dlResp.headers.get('content-type') || '';
+                        console.log(`📸 Download response: ${dlResp.status}, type: ${contentType}`);
+
+                        // Check if binary image
+                        if (contentType.includes('image') || contentType.includes('octet')) {
+                            response = dlResp;
+                            console.log(`📸 Got binary image!`);
+                            break;
+                        }
+
+                        // Check if JSON with content
+                        if (contentType.includes('json')) {
+                            const json = await dlResp.json();
+                            console.log(`📸 Got JSON:`, Object.keys(json));
+                            if (json.content) {
+                                // Content might be base64
+                                const imgBuffer = Buffer.from(json.content, 'base64');
+                                if (imgBuffer[0] === 0x89 || imgBuffer[0] === 0xFF) {
+                                    // Create fake response with buffer
+                                    response = {
+                                        ok: true,
+                                        _buffer: imgBuffer,
+                                        headers: { get: () => 'image/png' }
+                                    };
+                                    console.log(`📸 Decoded base64 from JSON!`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log(`📸 Download failed: ${e.message}`);
+                }
             }
         }
 
@@ -189,8 +240,14 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
         const contentType = response.headers.get('content-type');
         console.log(`📸 Response content-type: ${contentType}`);
 
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        // Handle both real response and fake response with _buffer
+        let buffer;
+        if (response._buffer) {
+            buffer = response._buffer;
+        } else {
+            const arrayBuffer = await response.arrayBuffer();
+            buffer = Buffer.from(arrayBuffer);
+        }
 
         // Validate image data
         if (buffer.length < 100) {
