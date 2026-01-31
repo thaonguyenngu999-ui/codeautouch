@@ -48,11 +48,15 @@ Lưu ý:
 - Nếu không chắc chắn, dùng action "wait" để đợi UI ổn định`;
 
 // IPC Handler for Grok Vision API calls
-ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [] }) => {
+ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [], imageFormat = 'jpeg' }) => {
     try {
         if (!XAI_API_KEY) {
             return { success: false, error: 'XAI_API_KEY not configured' };
         }
+
+        // Determine MIME type
+        const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
+        console.log(`🤖 Sending image with MIME type: ${mimeType}`);
 
         // Build messages with image
         const messages = [
@@ -63,7 +67,7 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
                     {
                         type: 'image_url',
                         image_url: {
-                            url: `data:image/png;base64,${screenshotBase64}`,
+                            url: `data:${mimeType};base64,${screenshotBase64}`,
                         },
                     },
                     {
@@ -126,23 +130,56 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
 ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
     try {
         const apiPort = 8080;
-        const screenshotUrl = `http://${deviceIp}:${apiPort}/control/screenshot?format=png`;
+        // Try JPEG first as it's more reliable, fallback to PNG
+        const screenshotUrl = `http://${deviceIp}:${apiPort}/control/screenshot?format=jpg`;
 
         console.log(`📸 Capturing screenshot from: ${screenshotUrl}`);
 
         const response = await fetch(screenshotUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
 
-        // Get dimensions from PNG header
-        let width = 750, height = 1334;
-        if (buffer.length > 24 && buffer.slice(12, 16).toString() === 'IHDR') {
-            width = buffer.readUInt32BE(16);
-            height = buffer.readUInt32BE(20);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        return { success: true, base64, width, height };
+        const contentType = response.headers.get('content-type');
+        console.log(`📸 Response content-type: ${contentType}`);
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Validate image data
+        if (buffer.length < 100) {
+            throw new Error('Screenshot data too small, likely invalid');
+        }
+
+        const base64 = buffer.toString('base64');
+
+        // Determine format from magic bytes
+        let format = 'jpeg';
+        let width = 750, height = 1334;
+
+        // Check PNG signature: 89 50 4E 47
+        if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+            format = 'png';
+            // Get dimensions from PNG IHDR
+            if (buffer.length > 24 && buffer.slice(12, 16).toString() === 'IHDR') {
+                width = buffer.readUInt32BE(16);
+                height = buffer.readUInt32BE(20);
+            }
+        }
+        // Check JPEG signature: FF D8 FF
+        else if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+            format = 'jpeg';
+            // Parse JPEG for dimensions (simplified)
+            // Just use defaults for now
+        }
+        else {
+            console.warn('📸 Unknown image format, first bytes:', buffer.slice(0, 8).toString('hex'));
+        }
+
+        console.log(`📸 Screenshot captured: ${buffer.length} bytes, format: ${format}, ${width}x${height}`);
+
+        return { success: true, base64, width, height, format };
     } catch (error) {
         console.error('Screenshot capture error:', error);
         return { success: false, error: error.message };

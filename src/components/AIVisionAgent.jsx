@@ -166,6 +166,7 @@ touchUp(1, endX, endY)
                 const response = await window.electronAPI.callGrokVision({
                     screenshotBase64: screenshotData.base64,
                     userPrompt: currentPrompt,
+                    imageFormat: screenshotData.format || 'jpeg',
                 });
 
                 if (!response.success) {
