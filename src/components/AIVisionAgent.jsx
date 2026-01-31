@@ -178,21 +178,29 @@ touchUp(1, endX, endY)
 
     const runQuickScript = async (deviceIp, luaCode) => {
         // Upload and run a quick script
-        const scriptName = `_ai_temp_${Date.now()}`;
+        const scriptName = `_ai_tap`;
+        const remotePath = '/Vcuto';  // AutoTouch script folder
+        const scriptPath = `${remotePath}/${scriptName}.lua`;
+
+        console.log(`🤖 Running script on ${deviceIp}:`, luaCode.substring(0, 100));
+
         const uploadResult = await window.electronAPI.uploadScriptToDevice({
             deviceIp,
             scriptName,
             luaCode,
-            remotePath: '/var/mobile/Library/AutoTouch/Scripts',
+            remotePath,
         });
 
         if (uploadResult.success) {
-            await window.electronAPI.runScriptOnDevice({
+            const runResult = await window.electronAPI.runScriptOnDevice({
                 deviceIp,
-                scriptPath: uploadResult.remotePath,
+                scriptPath,
             });
+            console.log(`🤖 Script run result:`, runResult);
             // Wait a bit for execution
             await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+            console.error(`🤖 Upload failed:`, uploadResult.error);
         }
     };
 
