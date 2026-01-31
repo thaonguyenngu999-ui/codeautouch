@@ -13,14 +13,13 @@ export default function AIVisionAgent({ selectedDevice }) {
     const abortRef = useRef(false);
 
     // Vision model selection
-    const [selectedModel, setSelectedModel] = useState('gemini');
+    const [selectedModel, setSelectedModel] = useState('openai');
     const availableModels = [
-        { value: 'gemini', label: 'Gemini (Recommended)' },
-        { value: 'gemini-fast', label: 'Gemini Fast' },
+        { value: 'openai', label: 'OpenAI GPT-4o' },
+        { value: 'openai-large', label: 'OpenAI Large' },
         { value: 'claude', label: 'Claude' },
-        { value: 'claude-fast', label: 'Claude Fast' },
-        { value: 'openai', label: 'GPT-4 Vision' },
-        { value: 'grok', label: 'Grok' },
+        { value: 'gemini', label: 'Gemini' },
+        { value: 'qwen-coder', label: 'Qwen Coder' },
     ];
 
     // OmniParser mode - use precise bounding boxes from UI detection
