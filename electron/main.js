@@ -16,6 +16,12 @@ const isDev = !app.isPackaged;
 const XAI_API_KEY = process.env.XAI_API_KEY || '';
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions';
 
+// Pollinations API configuration (supports multiple models)
+const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY || '';
+const POLLINATIONS_API_URL = 'https://gen.pollinations.ai/v1/chat/completions';
+// Available vision models: gemini, gemini-fast, claude, claude-fast, openai, openai-large, grok
+const POLLINATIONS_MODEL = process.env.POLLINATIONS_MODEL || 'gemini';
+
 // System prompt for AI Vision Agent
 const VISION_SYSTEM_PROMPT = `Bạn là AI Vision Agent điều khiển iPhone qua AutoTouch.
 Nhiệm vụ: Nhìn screenshot và đưa ra action cụ thể để hoàn thành yêu cầu của user.
@@ -53,15 +59,22 @@ Lưu ý:
 - Luôn ưu tiên tap vào CENTER của element, không tap vào edge
 - Nếu không chắc chắn, dùng action "wait" để đợi UI ổn định`;
 
-// IPC Handler for Grok Vision API calls
+// IPC Handler for Vision API calls (supports Pollinations or xAI)
 ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [], imageFormat = 'jpeg' }) => {
     try {
-        if (!XAI_API_KEY) {
-            return { success: false, error: 'XAI_API_KEY not configured' };
+        // Prefer Pollinations API if configured, fallback to xAI
+        const usePollinations = !!POLLINATIONS_API_KEY;
+        const apiKey = usePollinations ? POLLINATIONS_API_KEY : XAI_API_KEY;
+        const apiUrl = usePollinations ? POLLINATIONS_API_URL : XAI_API_URL;
+        const model = usePollinations ? POLLINATIONS_MODEL : 'grok-2-vision-latest';
+
+        if (!apiKey) {
+            return { success: false, error: 'No API key configured (set POLLINATIONS_API_KEY or XAI_API_KEY)' };
         }
 
         // Determine MIME type
         const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
+        console.log(`🤖 Using ${usePollinations ? 'Pollinations' : 'xAI'} API with model: ${model}`);
         console.log(`🤖 Sending image with MIME type: ${mimeType}`);
 
         // Build messages with image
@@ -84,16 +97,16 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
             },
         ];
 
-        console.log(`🤖 Calling Grok Vision API...`);
+        console.log(`🤖 Calling ${model} Vision API...`);
 
-        const response = await fetch(XAI_API_URL, {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${XAI_API_KEY}`,
+                'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-                model: 'grok-2-vision-latest',
+                model: model,
                 messages: [
                     { role: 'system', content: VISION_SYSTEM_PROMPT },
                     ...messages,
