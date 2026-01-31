@@ -194,10 +194,17 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
 
                     if (dlResp.ok) {
                         const buffer = Buffer.from(await dlResp.arrayBuffer());
-                        console.log(`📸 Downloaded ${buffer.length} bytes`);
-                        if (buffer[0] === 0x89 || buffer[0] === 0xFF) {
-                            response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
-                            console.log(`📸 Screenshot captured successfully!`);
+                        console.log(`📸 Downloaded ${buffer.length} bytes, first 8: ${buffer.slice(0, 8).toString('hex')}`);
+
+                        // Check PNG (89 50 4E 47) or JPEG (FF D8 FF)
+                        const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+                        const isJPEG = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+
+                        if (isPNG || isJPEG || buffer.length > 100000) {
+                            // Accept as image if valid format or large enough
+                            const format = isPNG ? 'image/png' : (isJPEG ? 'image/jpeg' : 'image/png');
+                            response = { ok: true, _buffer: buffer, headers: { get: () => format } };
+                            console.log(`📸 Screenshot captured! Format: ${format}`);
                             break;
                         }
                     } else {
