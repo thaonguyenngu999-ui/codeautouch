@@ -130,15 +130,35 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
 ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
     try {
         const apiPort = 8080;
-        // Try JPEG first as it's more reliable, fallback to PNG
-        const screenshotUrl = `http://${deviceIp}:${apiPort}/control/screenshot?format=jpg`;
 
-        console.log(`📸 Capturing screenshot from: ${screenshotUrl}`);
+        // Try multiple URL formats as fallback
+        const urlsToTry = [
+            `http://${deviceIp}:${apiPort}/screenshot`,
+            `http://${deviceIp}:${apiPort}/control/screenshot`,
+            `http://${deviceIp}:${apiPort}/control/screenshot?format=png`,
+            `http://${deviceIp}:${apiPort}/screen`,
+        ];
 
-        const response = await fetch(screenshotUrl);
+        let response = null;
+        let screenshotUrl = '';
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        for (const url of urlsToTry) {
+            console.log(`📸 Trying screenshot URL: ${url}`);
+            try {
+                const resp = await fetch(url);
+                if (resp.ok) {
+                    response = resp;
+                    screenshotUrl = url;
+                    console.log(`📸 Success with URL: ${url}`);
+                    break;
+                }
+            } catch (e) {
+                console.log(`📸 Failed: ${url} - ${e.message}`);
+            }
+        }
+
+        if (!response || !response.ok) {
+            throw new Error('All screenshot endpoints failed. Check device connection.');
         }
 
         const contentType = response.headers.get('content-type');
