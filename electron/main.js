@@ -181,23 +181,34 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
                 throw new Error(`Script failed: ${playResult.info || 'unknown error'}`);
             }
 
-            // Step 3: Wait for screenshot
-            await new Promise(r => setTimeout(r, 500));
+            // Step 3: Wait for screenshot to be saved
+            await new Promise(r => setTimeout(r, 1500));
 
-            // Step 4: Download using /file/content endpoint
+            // Step 4: Download with retry (server may be slow with large files)
             const contentUrl = `http://${deviceIp}:${apiPort}/file/content?path=${encodeURIComponent(screenshotPath)}`;
-            console.log(`📸 Downloading: ${contentUrl}`);
-            const dlResp = await fetch(contentUrl);
 
-            if (dlResp.ok) {
-                const buffer = Buffer.from(await dlResp.arrayBuffer());
-                console.log(`📸 Downloaded ${buffer.length} bytes`);
-                if (buffer[0] === 0x89 || buffer[0] === 0xFF) {
-                    response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
-                    console.log(`📸 Screenshot captured successfully!`);
+            for (let retry = 0; retry < 3; retry++) {
+                try {
+                    console.log(`📸 Downloading (attempt ${retry + 1}): ${contentUrl}`);
+                    const dlResp = await fetch(contentUrl);
+
+                    if (dlResp.ok) {
+                        const buffer = Buffer.from(await dlResp.arrayBuffer());
+                        console.log(`📸 Downloaded ${buffer.length} bytes`);
+                        if (buffer[0] === 0x89 || buffer[0] === 0xFF) {
+                            response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
+                            console.log(`📸 Screenshot captured successfully!`);
+                            break;
+                        }
+                    } else {
+                        console.log(`📸 Download failed: ${dlResp.status}`);
+                    }
+                } catch (dlError) {
+                    console.log(`📸 Download error (attempt ${retry + 1}): ${dlError.message}`);
+                    if (retry < 2) {
+                        await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
+                    }
                 }
-            } else {
-                console.log(`📸 Download failed: ${dlResp.status}`);
             }
         }
 
