@@ -30,9 +30,15 @@ const saveDevices = (devices) => {
     }
 };
 
-function ManageIPTab() {
+function ManageIPTab({ onDeviceSelect, selectedDevice: externalSelectedDevice }) {
     const [devices, setDevices] = useState(loadDevices);
-    const [selectedDevice, setSelectedDevice] = useState(null);
+    const [selectedDevice, setSelectedDeviceInternal] = useState(externalSelectedDevice || null);
+
+    // Sync with external selectedDevice
+    const setSelectedDevice = (device) => {
+        setSelectedDeviceInternal(device);
+        onDeviceSelect?.(device);
+    };
 
     // Save to localStorage whenever devices change
     useEffect(() => {

@@ -16,6 +16,139 @@ const isDev = !app.isPackaged;
 const XAI_API_KEY = process.env.XAI_API_KEY || '';
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions';
 
+// System prompt for AI Vision Agent
+const VISION_SYSTEM_PROMPT = `Bạn là AI Vision Agent điều khiển iPhone qua AutoTouch.
+Nhiệm vụ: Nhìn screenshot và đưa ra action cụ thể để hoàn thành yêu cầu của user.
+
+QUAN TRỌNG - Chỉ trả về JSON theo format:
+{
+  "thinking": "Phân tích ngắn gọn màn hình hiện tại",
+  "action": "tap" | "swipe" | "type" | "wait" | "done" | "error",
+  "params": {
+    "x": number,
+    "y": number,
+    "text": "string (nếu action=type)",
+    "direction": "up|down|left|right (nếu action=swipe)",
+    "duration": number (ms, nếu action=wait)
+  },
+  "message": "Mô tả action đang làm"
+}
+
+Ví dụ:
+- Tap vào nút: {"thinking": "Thấy nút Login", "action": "tap", "params": {"x": 200, "y": 500}, "message": "Tap vào nút Login"}
+- Vuốt lên: {"thinking": "Cần scroll xuống", "action": "swipe", "params": {"direction": "up"}, "message": "Vuốt lên để xem thêm"}
+- Nhập text: {"thinking": "Ô input đang focus", "action": "type", "params": {"text": "hello"}, "message": "Nhập text"}
+- Đợi: {"thinking": "Đang loading", "action": "wait", "params": {"duration": 2000}, "message": "Đợi load xong"}
+- Hoàn thành: {"thinking": "Đã xong task", "action": "done", "params": {}, "message": "Hoàn thành!"}
+- Lỗi: {"thinking": "Không thể tiếp tục", "action": "error", "params": {}, "message": "Lý do lỗi"}
+
+Lưu ý:
+- Tọa độ dựa trên kích thước thực của màn hình iPhone
+- Luôn ưu tiên tap vào CENTER của element, không tap vào edge
+- Nếu không chắc chắn, dùng action "wait" để đợi UI ổn định`;
+
+// IPC Handler for Grok Vision API calls
+ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt, conversationHistory = [] }) => {
+    try {
+        if (!XAI_API_KEY) {
+            return { success: false, error: 'XAI_API_KEY not configured' };
+        }
+
+        // Build messages with image
+        const messages = [
+            ...conversationHistory,
+            {
+                role: 'user',
+                content: [
+                    {
+                        type: 'image_url',
+                        image_url: {
+                            url: `data:image/png;base64,${screenshotBase64}`,
+                        },
+                    },
+                    {
+                        type: 'text',
+                        text: userPrompt,
+                    },
+                ],
+            },
+        ];
+
+        console.log(`🤖 Calling Grok Vision API...`);
+
+        const response = await fetch(XAI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${XAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: 'grok-2-vision-latest',
+                messages: [
+                    { role: 'system', content: VISION_SYSTEM_PROMPT },
+                    ...messages,
+                ],
+                temperature: 0.3,
+                max_tokens: 1000,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API Error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+
+        console.log(`🤖 Grok response:`, content);
+
+        // Try to parse JSON from response
+        try {
+            // Extract JSON from response (in case there's extra text)
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return { success: true, content, parsed };
+            }
+        } catch (e) {
+            console.warn('Could not parse JSON from response');
+        }
+
+        return { success: true, content, parsed: null };
+    } catch (error) {
+        console.error('Grok Vision API Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// IPC Handler to capture screenshot from device
+ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
+    try {
+        const apiPort = 8080;
+        const screenshotUrl = `http://${deviceIp}:${apiPort}/control/screenshot?format=png`;
+
+        console.log(`📸 Capturing screenshot from: ${screenshotUrl}`);
+
+        const response = await fetch(screenshotUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64 = buffer.toString('base64');
+
+        // Get dimensions from PNG header
+        let width = 750, height = 1334;
+        if (buffer.length > 24 && buffer.slice(12, 16).toString() === 'IHDR') {
+            width = buffer.readUInt32BE(16);
+            height = buffer.readUInt32BE(20);
+        }
+
+        return { success: true, base64, width, height };
+    } catch (error) {
+        console.error('Screenshot capture error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 // IPC Handler for xAI API calls
 ipcMain.handle('call-xai-api', async (event, messages, systemPrompt) => {
     try {
