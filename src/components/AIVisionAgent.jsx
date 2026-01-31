@@ -23,6 +23,10 @@ export default function AIVisionAgent({ selectedDevice }) {
         { value: 'grok', label: 'Grok' },
     ];
 
+    // OmniParser mode - use precise bounding boxes from UI detection
+    const [useOmniParser, setUseOmniParser] = useState(false);
+    const [omniElements, setOmniElements] = useState([]);
+
     // Store image and device dimensions for coordinate scaling
     const [imageSize, setImageSize] = useState({ width: 750, height: 1334 });
     const [deviceSize, setDeviceSize] = useState({ width: 750, height: 1334 });
@@ -135,6 +139,42 @@ export default function AIVisionAgent({ selectedDevice }) {
         console.log(`📍 Scale: (${x}, ${y}) → (${scaledX}, ${scaledY}) [${imageSize.width}x${imageSize.height} → ${deviceSize.width}x${deviceSize.height}]`);
 
         return { x: scaledX, y: scaledY };
+    };
+
+    // Get center coordinate from bounding box [x1, y1, x2, y2]
+    const getBboxCenter = (bbox) => {
+        if (!bbox || bbox.length < 4) return null;
+        const [x1, y1, x2, y2] = bbox;
+        return {
+            x: Math.round((x1 + x2) / 2),
+            y: Math.round((y1 + y2) / 2),
+        };
+    };
+
+    // Call OmniParser to detect UI elements
+    const detectElements = async (base64Image) => {
+        if (!window.electronAPI?.callOmniParser) {
+            console.warn('OmniParser API not available');
+            return null;
+        }
+
+        try {
+            const result = await window.electronAPI.callOmniParser({
+                screenshotBase64: base64Image,
+            });
+
+            if (result.success) {
+                console.log(`🔍 OmniParser detected ${result.elements?.length || 0} elements`);
+                setOmniElements(result.elements || []);
+                return result;
+            } else {
+                console.warn('OmniParser failed:', result.error);
+                return null;
+            }
+        } catch (err) {
+            console.error('OmniParser error:', err);
+            return null;
+        }
     };
 
     const executeAction = async (action) => {
@@ -268,13 +308,37 @@ touchUp(1, endX, endY)
                 addMessage('system', `[${iteration}] Dang chup man hinh...`);
                 const screenshotData = await captureScreenshot();
 
-                // Step 2: Call Vision API
+                const screenWidth = screenshotData.width || 750;
+                const screenHeight = screenshotData.height || 1334;
+
+                // Step 2a: If OmniParser mode, detect UI elements first
+                let detectedElements = [];
+                let elementsPrompt = '';
+
+                if (useOmniParser) {
+                    setStatus('detecting');
+                    addMessage('system', `[${iteration}] OmniParser dang detect UI elements...`);
+
+                    const omniResult = await detectElements(screenshotData.base64);
+                    if (omniResult?.elements?.length > 0) {
+                        detectedElements = omniResult.elements;
+                        // Build element list for LLM
+                        elementsPrompt = `\n\n[DETECTED UI ELEMENTS - Chon element_id de tap chinh xac]\n`;
+                        detectedElements.forEach((el, idx) => {
+                            const center = getBboxCenter(el.bbox);
+                            elementsPrompt += `[${idx}] "${el.text || el.type || 'element'}" - center: (${center?.x}, ${center?.y})\n`;
+                        });
+                        elementsPrompt += `\nNeu tap, hay tra ve "element_id" thay vi "x,y" truc tiep. VD: {"action":"tap","params":{"element_id":5}}`;
+                        addMessage('system', `Tim thay ${detectedElements.length} UI elements`);
+                    } else {
+                        addMessage('system', `OmniParser khong detect duoc elements, dung coordinate truc tiep`);
+                    }
+                }
+
+                // Step 2b: Call Vision API
                 setStatus('thinking');
                 addMessage('system', `[${iteration}] ${selectedModel.toUpperCase()} dang phan tich...`);
 
-                // Include screen dimensions in prompt so Grok knows exact coordinates
-                const screenWidth = screenshotData.width || 750;
-                const screenHeight = screenshotData.height || 1334;
                 const promptWithDimensions = `${currentPrompt}
 
 [CRITICAL - IMAGE SIZE: ${screenWidth}x${screenHeight} pixels]
@@ -282,7 +346,7 @@ touchUp(1, endX, endY)
 - Toa do Y: 0 (tren) den ${screenHeight} (duoi)
 - Uoc luong chinh xac vi tri PIXEL cua element can tap
 - VD: Icon o giua man hinh: x=${Math.round(screenWidth/2)}, y=${Math.round(screenHeight/2)}
-- VD: Icon o goc duoi trai dock: x=${Math.round(screenWidth*0.15)}, y=${Math.round(screenHeight*0.92)}`;
+- VD: Icon o goc duoi trai dock: x=${Math.round(screenWidth*0.15)}, y=${Math.round(screenHeight*0.92)}${elementsPrompt}`;
 
                 const response = await window.electronAPI.callGrokVision({
                     screenshotBase64: screenshotData.base64,
@@ -302,6 +366,20 @@ touchUp(1, endX, endY)
                     addMessage('assistant', content);
                     addMessage('error', 'Khong parse duoc JSON tu response');
                     break;
+                }
+
+                // If OmniParser mode and LLM returned element_id, get precise coordinates
+                if (useOmniParser && parsed.action === 'tap' && parsed.params?.element_id !== undefined) {
+                    const elementId = parsed.params.element_id;
+                    const element = detectedElements[elementId];
+                    if (element?.bbox) {
+                        const center = getBboxCenter(element.bbox);
+                        if (center) {
+                            parsed.params.x = center.x;
+                            parsed.params.y = center.y;
+                            addMessage('system', `🎯 OmniParser: element[${elementId}] → (${center.x}, ${center.y})`);
+                        }
+                    }
                 }
 
                 // Show AI thinking
@@ -392,6 +470,25 @@ touchUp(1, endX, endY)
                             <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                     </select>
+                    <label
+                        style={{
+                            marginLeft: 10,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.85em',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={useOmniParser}
+                            onChange={(e) => setUseOmniParser(e.target.checked)}
+                            disabled={isRunning}
+                            style={{ cursor: 'pointer' }}
+                        />
+                        OmniParser
+                    </label>
                     <span style={{ marginLeft: 10, opacity: 0.7, fontSize: '0.85em' }}>
                         IMG: {imageSize.width}x{imageSize.height} | DEV: {deviceSize.width}x{deviceSize.height}
                     </span>

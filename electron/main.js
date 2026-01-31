@@ -22,6 +22,11 @@ const POLLINATIONS_API_URL = 'https://gen.pollinations.ai/v1/chat/completions';
 // Available vision models: gemini, gemini-fast, claude, claude-fast, openai, openai-large, grok
 const POLLINATIONS_MODEL = process.env.POLLINATIONS_MODEL || 'gemini';
 
+// OmniParser configuration (for precise UI element detection)
+// Can use Replicate API or self-hosted endpoint
+const OMNIPARSER_API_URL = process.env.OMNIPARSER_API_URL || 'https://api.replicate.com/v1/predictions';
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || '';
+
 // System prompt for AI Vision Agent
 const VISION_SYSTEM_PROMPT = `Bạn là AI Vision Agent điều khiển iPhone qua AutoTouch.
 Nhiệm vụ: Nhìn screenshot và đưa ra action cụ thể để hoàn thành yêu cầu của user.
@@ -142,6 +147,101 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
         return { success: true, content, parsed: null };
     } catch (error) {
         console.error('Grok Vision API Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// IPC Handler for OmniParser - UI element detection with precise bounding boxes
+ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElement }) => {
+    try {
+        // Check if using Replicate or self-hosted
+        const isReplicate = OMNIPARSER_API_URL.includes('replicate.com');
+
+        if (isReplicate && !REPLICATE_API_TOKEN) {
+            return { success: false, error: 'REPLICATE_API_TOKEN not configured' };
+        }
+
+        console.log(`🔍 Calling OmniParser to detect UI elements...`);
+
+        if (isReplicate) {
+            // Replicate API format
+            const response = await fetch(OMNIPARSER_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
+                },
+                body: JSON.stringify({
+                    version: 'fc49a0d9e7a56936c8bf20f8b3865e2c4a65c99ae1dea24adb29ec43cdab43e5', // OmniParser v2
+                    input: {
+                        image: `data:image/jpeg;base64,${screenshotBase64}`,
+                        box_threshold: 0.3,
+                        iou_threshold: 0.3,
+                    },
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Replicate API error: ${response.status} - ${errorText}`);
+            }
+
+            const prediction = await response.json();
+
+            // Replicate returns async, need to poll for result
+            let result = prediction;
+            while (result.status === 'starting' || result.status === 'processing') {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const pollResponse = await fetch(result.urls.get, {
+                    headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
+                });
+                result = await pollResponse.json();
+            }
+
+            if (result.status === 'succeeded') {
+                // Parse OmniParser output - it returns labeled image and parsed elements
+                const elements = result.output?.parsed_elements || [];
+                const labeledImage = result.output?.labeled_image || null;
+
+                console.log(`🔍 OmniParser found ${elements.length} UI elements`);
+
+                return {
+                    success: true,
+                    elements,
+                    labeledImage,
+                    targetElement,
+                };
+            } else {
+                throw new Error(`OmniParser failed: ${result.error || 'Unknown error'}`);
+            }
+        } else {
+            // Self-hosted OmniParser API (e.g., Docker container)
+            const response = await fetch(`${OMNIPARSER_API_URL}/process_image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image: screenshotBase64,
+                    box_threshold: 0.3,
+                    iou_threshold: 0.3,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`OmniParser API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log(`🔍 OmniParser found ${data.elements?.length || 0} UI elements`);
+
+            return {
+                success: true,
+                elements: data.elements || [],
+                labeledImage: data.labeled_image || null,
+                bboxes: data.bboxes || [],
+            };
+        }
+    } catch (error) {
+        console.error('OmniParser Error:', error);
         return { success: false, error: error.message };
     }
 });
