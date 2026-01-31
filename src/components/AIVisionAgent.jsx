@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { VncScreen } from 'react-vnc';
 
 export default function AIVisionAgent({ selectedDevice }) {
+    const [vncUrl, setVncUrl] = useState(null);
+    const vncContainerRef = useRef(null);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isRunning, setIsRunning] = useState(false);
@@ -17,6 +20,33 @@ export default function AIVisionAgent({ selectedDevice }) {
         scrollToBottom();
     }, [messages]);
 
+    // Start VNC proxy when device is selected
+    useEffect(() => {
+        if (!selectedDevice?.ip || !window.electronAPI) {
+            setVncUrl(null);
+            return;
+        }
+
+        const startProxy = async () => {
+            try {
+                const result = await window.electronAPI.startVncProxy({
+                    deviceId: selectedDevice.id || selectedDevice.ip,
+                    targetIp: selectedDevice.ip,
+                    targetPort: 5900
+                });
+
+                if (result.success) {
+                    setVncUrl(`ws://localhost:${result.port}`);
+                    console.log('📺 VNC connected for AI Vision');
+                }
+            } catch (err) {
+                console.warn('VNC proxy error:', err);
+            }
+        };
+
+        startProxy();
+    }, [selectedDevice?.ip]);
+
     const addMessage = (role, content, extra = {}) => {
         setMessages(prev => [...prev, { role, content, timestamp: Date.now(), ...extra }]);
     };
@@ -28,10 +58,12 @@ export default function AIVisionAgent({ selectedDevice }) {
 
         setStatus('capturing');
 
-        // Try to capture from VNC canvas first (faster, no network needed)
-        const vncCanvas = document.querySelector('.vnc-screen canvas, .phone-display canvas, canvas[class*="vnc"]');
+        // Capture from VNC canvas in this component
+        const vncCanvas = vncContainerRef.current?.querySelector('canvas');
 
-        if (vncCanvas) {
+        console.log(`📸 VNC canvas:`, vncCanvas ? `${vncCanvas.width}x${vncCanvas.height}` : 'not found');
+
+        if (vncCanvas && vncCanvas.width > 100) {
             try {
                 // Get image data from VNC canvas
                 const dataUrl = vncCanvas.toDataURL('image/jpeg', 0.85); // JPEG for smaller size
@@ -283,8 +315,38 @@ touchUp(1, endX, endY)
                 </div>
             </div>
 
-            <div className="ai-content">
-                <div className="ai-messages">
+            <div className="ai-content" style={{ display: 'flex', gap: '15px' }}>
+                {/* VNC Viewer */}
+                <div
+                    ref={vncContainerRef}
+                    className="ai-vnc-panel"
+                    style={{
+                        width: '300px',
+                        minWidth: '300px',
+                        background: '#000',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        aspectRatio: '9/16'
+                    }}
+                >
+                    {vncUrl ? (
+                        <VncScreen
+                            url={vncUrl}
+                            scaleViewport={true}
+                            background="#000000"
+                            style={{ width: '100%', height: '100%' }}
+                            retryDuration={3000}
+                            qualityLevel={6}
+                            compressionLevel={2}
+                        />
+                    ) : (
+                        <div style={{ color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                            {selectedDevice ? 'Connecting VNC...' : 'Select a device'}
+                        </div>
+                    )}
+                </div>
+
+                <div className="ai-messages" style={{ flex: 1 }}>
                     {messages.length === 0 && (
                         <div className="ai-welcome">
                             <h4>Chao mung den voi AI Vision Agent!</h4>
