@@ -264,7 +264,14 @@ touchUp(1, endX, endY)
                 // Include screen dimensions in prompt so Grok knows exact coordinates
                 const screenWidth = screenshotData.width || 750;
                 const screenHeight = screenshotData.height || 1334;
-                const promptWithDimensions = `${currentPrompt}\n\n[QUAN TRONG: Kich thuoc man hinh la ${screenWidth}x${screenHeight} pixels. Toa do tap phai nam trong range nay!]`;
+                const promptWithDimensions = `${currentPrompt}
+
+[CRITICAL - IMAGE SIZE: ${screenWidth}x${screenHeight} pixels]
+- Toa do X: 0 (trai) den ${screenWidth} (phai)
+- Toa do Y: 0 (tren) den ${screenHeight} (duoi)
+- Uoc luong chinh xac vi tri PIXEL cua element can tap
+- VD: Icon o giua man hinh: x=${Math.round(screenWidth/2)}, y=${Math.round(screenHeight/2)}
+- VD: Icon o goc duoi trai dock: x=${Math.round(screenWidth*0.15)}, y=${Math.round(screenHeight*0.92)}`;
 
                 const response = await window.electronAPI.callGrokVision({
                     screenshotBase64: screenshotData.base64,
@@ -353,6 +360,9 @@ touchUp(1, endX, endY)
                 <div className="ai-status-bar">
                     <span className={`status-dot ${selectedDevice ? 'online' : ''}`}></span>
                     <span>{selectedDevice?.ip || 'Chua ket noi'}</span>
+                    <span style={{ marginLeft: 10, opacity: 0.7, fontSize: '0.85em' }}>
+                        IMG: {imageSize.width}x{imageSize.height} | DEV: {deviceSize.width}x{deviceSize.height}
+                    </span>
                     {status !== 'idle' && (
                         <span className="status-badge">{status}</span>
                     )}
