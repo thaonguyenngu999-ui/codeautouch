@@ -159,122 +159,45 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
         if (!response) {
             console.log(`📸 Using Lua fallback...`);
 
-            // screenshot("name") saves to /var/mobile/Library/AutoTouch/name.PNG
+            // screenshot("name") saves to /Vcuto/name.PNG
             const screenshotName = '_ai_temp';
-            const tempPath = `/var/mobile/Library/AutoTouch/${screenshotName}.PNG`;
-            // Use /Vcuto folder - where AutoTouch looks for scripts
+            const screenshotPath = `/Vcuto/${screenshotName}.PNG`;
             const scriptPath = '/Vcuto/_ai_ss.lua';
 
             // Step 1: Create and upload screenshot script
-            console.log(`📸 Step 1: Creating script at ${scriptPath}`);
             await fetch(`http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(scriptPath)}`).catch(() => {});
-
-            const updateResp = await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
+            await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `content=${encodeURIComponent(`screenshot("${screenshotName}")`)}`,
             });
-            console.log(`📸 Step 1 result: ${updateResp.status}`);
 
             // Step 2: Run the script
-            console.log(`📸 Step 2: Running script...`);
             const playResp = await fetch(`http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptPath)}`);
             const playResult = await playResp.json().catch(() => ({}));
-            console.log(`📸 Step 2 result:`, playResult);
+            console.log(`📸 Script result:`, playResult);
 
-            // Step 3: Wait for screenshot to complete
-            await new Promise(r => setTimeout(r, 1000));
-
-            // Step 3.5: List directory to find where screenshot was saved
-            const dirsToCheck = [
-                '/var/mobile/Library/AutoTouch',
-                '/var/mobile/Library/AutoTouch/Screenshots',
-                '/Vcuto',
-            ];
-            for (const dir of dirsToCheck) {
-                try {
-                    const listUrl = `http://${deviceIp}:${apiPort}/file/list?path=${encodeURIComponent(dir)}`;
-                    const listResp = await fetch(listUrl);
-                    if (listResp.ok) {
-                        const files = await listResp.json();
-                        console.log(`📸 Files in ${dir}:`, JSON.stringify(files).substring(0, 500));
-                    }
-                } catch (e) { }
+            if (playResult.status !== 'success') {
+                throw new Error(`Script failed: ${playResult.info || 'unknown error'}`);
             }
 
-            // Step 4: Try multiple download methods
-            console.log(`📸 Step 4: Downloading screenshot...`);
+            // Step 3: Wait for screenshot
+            await new Promise(r => setTimeout(r, 500));
 
-            // Try multiple possible paths
-            const possiblePaths = [
-                tempPath,
-                `/var/mobile/Library/AutoTouch/Screenshots/${screenshotName}.PNG`,
-                `/var/mobile/Library/AutoTouch/Screenshots/${screenshotName}.png`,
-                `/Vcuto/${screenshotName}.PNG`,
-            ];
+            // Step 4: Download using /file/content endpoint
+            const contentUrl = `http://${deviceIp}:${apiPort}/file/content?path=${encodeURIComponent(screenshotPath)}`;
+            console.log(`📸 Downloading: ${contentUrl}`);
+            const dlResp = await fetch(contentUrl);
 
-            const downloadUrls = [];
-            for (const p of possiblePaths) {
-                downloadUrls.push(`http://${deviceIp}:${apiPort}/file/download?path=${encodeURIComponent(p)}`);
-                downloadUrls.push(`http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(p)}`);
-            }
-
-            for (const dlUrl of downloadUrls) {
-                console.log(`📸 Trying download: ${dlUrl}`);
-                try {
-                    const dlResp = await fetch(dlUrl);
-                    const contentType = dlResp.headers.get('content-type') || '';
-                    console.log(`📸 Response: ${dlResp.status} ${dlResp.statusText}, type: ${contentType}`);
-
-                    if (!dlResp.ok) {
-                        // Log error response body
-                        const errText = await dlResp.text().catch(() => '');
-                        console.log(`📸 Error body: ${errText.substring(0, 200)}`);
-                        continue;
-                    }
-
-                    // Check if binary image
-                    if (contentType.includes('image') || contentType.includes('octet')) {
-                        response = dlResp;
-                        console.log(`📸 Got binary image!`);
-                        break;
-                    }
-
-                    // Try to read as buffer and check magic bytes
-                    const arrayBuffer = await dlResp.arrayBuffer();
-                    const buffer = Buffer.from(arrayBuffer);
-                    console.log(`📸 Got ${buffer.length} bytes, first 8: ${buffer.slice(0, 8).toString('hex')}`);
-
-                    // Check if it's actually an image
-                    if (buffer[0] === 0x89 && buffer[1] === 0x50) {
-                        // PNG
-                        response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
-                        console.log(`📸 Detected PNG image!`);
-                        break;
-                    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
-                        // JPEG
-                        response = { ok: true, _buffer: buffer, headers: { get: () => 'image/jpeg' } };
-                        console.log(`📸 Detected JPEG image!`);
-                        break;
-                    }
-
-                    // Check if JSON with content
-                    if (contentType.includes('json')) {
-                        const jsonStr = buffer.toString('utf8');
-                        const json = JSON.parse(jsonStr);
-                        console.log(`📸 Got JSON:`, Object.keys(json));
-                        if (json.content) {
-                            const imgBuffer = Buffer.from(json.content, 'base64');
-                            if (imgBuffer[0] === 0x89 || imgBuffer[0] === 0xFF) {
-                                response = { ok: true, _buffer: imgBuffer, headers: { get: () => 'image/png' } };
-                                console.log(`📸 Decoded base64 from JSON!`);
-                                break;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.log(`📸 Download error: ${e.message}`);
+            if (dlResp.ok) {
+                const buffer = Buffer.from(await dlResp.arrayBuffer());
+                console.log(`📸 Downloaded ${buffer.length} bytes`);
+                if (buffer[0] === 0x89 || buffer[0] === 0xFF) {
+                    response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
+                    console.log(`📸 Screenshot captured successfully!`);
                 }
+            } else {
+                console.log(`📸 Download failed: ${dlResp.status}`);
             }
         }
 
