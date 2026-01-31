@@ -159,7 +159,9 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
         if (!response) {
             console.log(`📸 Using Lua fallback...`);
 
-            const tempPath = '/var/mobile/Library/AutoTouch/Screenshots/_ai_temp.png';
+            // screenshot("name") saves to /var/mobile/Library/AutoTouch/name.PNG
+            const screenshotName = '_ai_temp';
+            const tempPath = `/var/mobile/Library/AutoTouch/${screenshotName}.PNG`;
             const scriptPath = '/var/mobile/Library/AutoTouch/Scripts/_ai_ss.lua';
 
             // Step 1: Create and upload screenshot script
@@ -169,7 +171,7 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
             const updateResp = await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `content=${encodeURIComponent(`screenshot("${tempPath}")`)}`,
+                body: `content=${encodeURIComponent(`screenshot("${screenshotName}")`)}`,
             });
             console.log(`📸 Step 1 result: ${updateResp.status}`);
 
