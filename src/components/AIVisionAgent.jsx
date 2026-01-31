@@ -27,6 +27,33 @@ export default function AIVisionAgent({ selectedDevice }) {
         }
 
         setStatus('capturing');
+
+        // Try to capture from VNC canvas first (faster, no network needed)
+        const vncCanvas = document.querySelector('.vnc-screen canvas, .phone-display canvas, canvas[class*="vnc"]');
+
+        if (vncCanvas) {
+            try {
+                // Get image data from VNC canvas
+                const dataUrl = vncCanvas.toDataURL('image/jpeg', 0.85); // JPEG for smaller size
+                const base64 = dataUrl.split(',')[1];
+
+                console.log(`📸 Captured from VNC canvas: ${base64.length} chars`);
+
+                setScreenshot(dataUrl);
+                return {
+                    success: true,
+                    base64,
+                    width: vncCanvas.width,
+                    height: vncCanvas.height,
+                    format: 'jpeg'
+                };
+            } catch (canvasErr) {
+                console.warn('VNC canvas capture failed:', canvasErr);
+            }
+        }
+
+        // Fallback to API method
+        console.log('📸 VNC canvas not found, using API fallback...');
         const result = await window.electronAPI.captureDeviceScreenshot({
             deviceIp: selectedDevice.ip,
         });
