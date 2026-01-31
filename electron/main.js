@@ -34,6 +34,13 @@ QUAN TRỌNG - Chỉ trả về JSON theo format:
   "message": "Mô tả action đang làm"
 }
 
+CRITICAL về tọa độ:
+- User sẽ cung cấp KÍCH THƯỚC CHÍNH XÁC của ảnh trong prompt
+- Tọa độ x,y PHẢI nằm trong kích thước đó
+- Ước lượng vị trí pixel dựa trên ảnh bạn thấy
+- VD: Nếu ảnh 750x1334, icon ở góc dưới trái có thể là (100, 1200)
+- VD: Nếu ảnh 300x533, icon ở góc dưới trái có thể là (40, 480)
+
 Ví dụ:
 - Tap vào nút: {"thinking": "Thấy nút Login", "action": "tap", "params": {"x": 200, "y": 500}, "message": "Tap vào nút Login"}
 - Vuốt lên: {"thinking": "Cần scroll xuống", "action": "swipe", "params": {"direction": "up"}, "message": "Vuốt lên để xem thêm"}
@@ -43,7 +50,6 @@ Ví dụ:
 - Lỗi: {"thinking": "Không thể tiếp tục", "action": "error", "params": {}, "message": "Lý do lỗi"}
 
 Lưu ý:
-- Tọa độ dựa trên kích thước thực của màn hình iPhone
 - Luôn ưu tiên tap vào CENTER của element, không tap vào edge
 - Nếu không chắc chắn, dùng action "wait" để đợi UI ổn định`;
 

@@ -12,6 +12,10 @@ export default function AIVisionAgent({ selectedDevice }) {
     const messagesEndRef = useRef(null);
     const abortRef = useRef(false);
 
+    // Store image and device dimensions for coordinate scaling
+    const [imageSize, setImageSize] = useState({ width: 750, height: 1334 });
+    const [deviceSize, setDeviceSize] = useState({ width: 750, height: 1334 });
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -20,7 +24,7 @@ export default function AIVisionAgent({ selectedDevice }) {
         scrollToBottom();
     }, [messages]);
 
-    // Start VNC proxy when device is selected
+    // Start VNC proxy and fetch device screen size when device is selected
     useEffect(() => {
         if (!selectedDevice?.ip || !window.electronAPI) {
             setVncUrl(null);
@@ -29,6 +33,7 @@ export default function AIVisionAgent({ selectedDevice }) {
 
         const startProxy = async () => {
             try {
+                // Start VNC proxy
                 const result = await window.electronAPI.startVncProxy({
                     deviceId: selectedDevice.id || selectedDevice.ip,
                     targetIp: selectedDevice.ip,
@@ -39,8 +44,15 @@ export default function AIVisionAgent({ selectedDevice }) {
                     setVncUrl(`ws://localhost:${result.port}`);
                     console.log('📺 VNC connected for AI Vision');
                 }
+
+                // Fetch device screen size
+                const screenResult = await window.electronAPI.getDeviceScreen(selectedDevice.ip);
+                if (screenResult.success) {
+                    setDeviceSize({ width: screenResult.width, height: screenResult.height });
+                    console.log(`📱 Device screen: ${screenResult.width}x${screenResult.height}`);
+                }
             } catch (err) {
-                console.warn('VNC proxy error:', err);
+                console.warn('VNC/screen error:', err);
             }
         };
 
@@ -69,7 +81,10 @@ export default function AIVisionAgent({ selectedDevice }) {
                 const dataUrl = vncCanvas.toDataURL('image/jpeg', 0.85); // JPEG for smaller size
                 const base64 = dataUrl.split(',')[1];
 
-                console.log(`📸 Captured from VNC canvas: ${base64.length} chars`);
+                // Store image dimensions for coordinate scaling
+                setImageSize({ width: vncCanvas.width, height: vncCanvas.height });
+
+                console.log(`📸 Captured from VNC canvas: ${vncCanvas.width}x${vncCanvas.height}`);
 
                 setScreenshot(dataUrl);
                 return {
@@ -98,6 +113,19 @@ export default function AIVisionAgent({ selectedDevice }) {
         return result;
     };
 
+    // Scale coordinates from image size to device size
+    const scaleCoordinates = (x, y) => {
+        const scaleX = deviceSize.width / imageSize.width;
+        const scaleY = deviceSize.height / imageSize.height;
+
+        const scaledX = Math.round(x * scaleX);
+        const scaledY = Math.round(y * scaleY);
+
+        console.log(`📍 Scale: (${x}, ${y}) → (${scaledX}, ${scaledY}) [${imageSize.width}x${imageSize.height} → ${deviceSize.width}x${deviceSize.height}]`);
+
+        return { x: scaledX, y: scaledY };
+    };
+
     const executeAction = async (action) => {
         if (!selectedDevice?.ip) return;
 
@@ -106,11 +134,14 @@ export default function AIVisionAgent({ selectedDevice }) {
 
         switch (actionType) {
             case 'tap':
+                // Scale coordinates from image to device
+                const { x, y } = scaleCoordinates(params.x, params.y);
+
                 // Generate and run tap script
                 const tapScript = `
-touchDown(1, ${params.x}, ${params.y});
+touchDown(1, ${x}, ${y});
 usleep(math.random(100000, 200000));
-touchUp(1, ${params.x}, ${params.y});
+touchUp(1, ${x}, ${y});
 `;
                 await runQuickScript(deviceIp, tapScript);
                 break;
@@ -230,9 +261,14 @@ touchUp(1, endX, endY)
                 setStatus('thinking');
                 addMessage('system', `[${iteration}] Grok dang phan tich...`);
 
+                // Include screen dimensions in prompt so Grok knows exact coordinates
+                const screenWidth = screenshotData.width || 750;
+                const screenHeight = screenshotData.height || 1334;
+                const promptWithDimensions = `${currentPrompt}\n\n[QUAN TRONG: Kich thuoc man hinh la ${screenWidth}x${screenHeight} pixels. Toa do tap phai nam trong range nay!]`;
+
                 const response = await window.electronAPI.callGrokVision({
                     screenshotBase64: screenshotData.base64,
-                    userPrompt: currentPrompt,
+                    userPrompt: promptWithDimensions,
                     imageFormat: screenshotData.format || 'jpeg',
                 });
 
