@@ -185,15 +185,39 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
             // Step 3: Wait for screenshot to complete
             await new Promise(r => setTimeout(r, 1000));
 
-            // Step 4: Try multiple download methods
-            console.log(`📸 Step 3: Downloading screenshot...`);
-
-            // Method 1: /file/download (binary)
-            const downloadUrls = [
-                `http://${deviceIp}:${apiPort}/file/download?path=${encodeURIComponent(tempPath)}`,
-                `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempPath)}`,
-                `http://${deviceIp}:${apiPort}${tempPath}`,
+            // Step 3.5: List directory to find where screenshot was saved
+            const dirsToCheck = [
+                '/var/mobile/Library/AutoTouch',
+                '/var/mobile/Library/AutoTouch/Screenshots',
+                '/Vcuto',
             ];
+            for (const dir of dirsToCheck) {
+                try {
+                    const listUrl = `http://${deviceIp}:${apiPort}/file/list?path=${encodeURIComponent(dir)}`;
+                    const listResp = await fetch(listUrl);
+                    if (listResp.ok) {
+                        const files = await listResp.json();
+                        console.log(`📸 Files in ${dir}:`, JSON.stringify(files).substring(0, 500));
+                    }
+                } catch (e) { }
+            }
+
+            // Step 4: Try multiple download methods
+            console.log(`📸 Step 4: Downloading screenshot...`);
+
+            // Try multiple possible paths
+            const possiblePaths = [
+                tempPath,
+                `/var/mobile/Library/AutoTouch/Screenshots/${screenshotName}.PNG`,
+                `/var/mobile/Library/AutoTouch/Screenshots/${screenshotName}.png`,
+                `/Vcuto/${screenshotName}.PNG`,
+            ];
+
+            const downloadUrls = [];
+            for (const p of possiblePaths) {
+                downloadUrls.push(`http://${deviceIp}:${apiPort}/file/download?path=${encodeURIComponent(p)}`);
+                downloadUrls.push(`http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(p)}`);
+            }
 
             for (const dlUrl of downloadUrls) {
                 console.log(`📸 Trying download: ${dlUrl}`);
