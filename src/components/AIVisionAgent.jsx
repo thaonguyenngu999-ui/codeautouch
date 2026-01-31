@@ -359,29 +359,30 @@ touchUp(1, endX, endY)
                 </div>
             </div>
 
-            <div className="ai-content" style={{ display: 'flex', gap: '15px' }}>
-                {/* VNC Viewer */}
+            <div className="ai-content" style={{ display: 'flex', gap: '15px', overflow: 'auto' }}>
+                {/* VNC Viewer - Real size, scrollable */}
                 <div
                     ref={vncContainerRef}
                     className="ai-vnc-panel"
                     style={{
-                        width: '300px',
-                        minWidth: '300px',
+                        minWidth: '375px',
+                        maxWidth: '400px',
+                        height: '700px',
                         background: '#000',
                         borderRadius: '12px',
-                        overflow: 'hidden',
-                        aspectRatio: '9/16'
+                        overflow: 'auto',
+                        flexShrink: 0
                     }}
                 >
                     {vncUrl ? (
                         <VncScreen
                             url={vncUrl}
-                            scaleViewport={true}
+                            scaleViewport={false}
                             background="#000000"
-                            style={{ width: '100%', height: '100%' }}
+                            style={{ width: 'auto', height: 'auto' }}
                             retryDuration={3000}
-                            qualityLevel={6}
-                            compressionLevel={2}
+                            qualityLevel={9}
+                            compressionLevel={0}
                         />
                     ) : (
                         <div style={{ color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
