@@ -129,36 +129,50 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
 // IPC Handler to capture screenshot from device
 ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
     try {
-        const apiPort = 8080;
-
-        // Try multiple URL formats as fallback
-        const urlsToTry = [
-            `http://${deviceIp}:${apiPort}/screenshot`,
-            `http://${deviceIp}:${apiPort}/control/screenshot`,
-            `http://${deviceIp}:${apiPort}/control/screenshot?format=png`,
-            `http://${deviceIp}:${apiPort}/screen`,
+        // Try multiple ports and endpoint combinations
+        const portsToTry = [8080, 8081, 80];
+        const endpointsToTry = [
+            '/screenshot',
+            '/screen',
+            '/control/screenshot',
+            '/control/screenshot?format=png',
+            '/control/screenshot?format=jpg',
+            '/control/capture',
+            '/screen/capture',
+            '/api/screenshot',
         ];
 
         let response = null;
         let screenshotUrl = '';
 
-        for (const url of urlsToTry) {
-            console.log(`📸 Trying screenshot URL: ${url}`);
-            try {
-                const resp = await fetch(url);
-                if (resp.ok) {
-                    response = resp;
-                    screenshotUrl = url;
-                    console.log(`📸 Success with URL: ${url}`);
-                    break;
+        // Try each port and endpoint combination
+        outerLoop:
+        for (const port of portsToTry) {
+            for (const endpoint of endpointsToTry) {
+                const url = `http://${deviceIp}:${port}${endpoint}`;
+                console.log(`📸 Trying: ${url}`);
+                try {
+                    const resp = await fetch(url, { timeout: 3000 });
+                    if (resp.ok) {
+                        // Check if it's actually image data
+                        const contentType = resp.headers.get('content-type') || '';
+                        if (contentType.includes('image') || contentType.includes('octet')) {
+                            response = resp;
+                            screenshotUrl = url;
+                            console.log(`📸 Success with URL: ${url} (${contentType})`);
+                            break outerLoop;
+                        } else {
+                            console.log(`📸 Got 200 but not image: ${contentType}`);
+                        }
+                    }
+                } catch (e) {
+                    // Silently continue to next URL
                 }
-            } catch (e) {
-                console.log(`📸 Failed: ${url} - ${e.message}`);
             }
         }
 
-        if (!response || !response.ok) {
-            throw new Error('All screenshot endpoints failed. Check device connection.');
+        if (!response) {
+            throw new Error(`Screenshot capture failed. AutoTouch API may not support screenshot endpoint. Device: ${deviceIp}`);
         }
 
         const contentType = response.headers.get('content-type');
