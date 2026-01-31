@@ -154,16 +154,58 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
 // IPC Handler for OmniParser - UI element detection with precise bounding boxes
 ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElement }) => {
     try {
-        // Check if using Replicate or self-hosted
+        // Check if using Replicate, local Florence-2, or self-hosted OmniParser
         const isReplicate = OMNIPARSER_API_URL.includes('replicate.com');
+        const isLocalFlorence = OMNIPARSER_API_URL.includes('localhost:8000') || OMNIPARSER_API_URL.includes('127.0.0.1:8000');
 
         if (isReplicate && !REPLICATE_API_TOKEN) {
             return { success: false, error: 'REPLICATE_API_TOKEN not configured' };
         }
 
-        console.log(`🔍 Calling OmniParser to detect UI elements...`);
+        console.log(`🔍 Calling UI detection API (${isLocalFlorence ? 'Florence-2 Local' : isReplicate ? 'Replicate' : 'OmniParser'})...`);
 
-        if (isReplicate) {
+        if (isLocalFlorence) {
+            // Local Florence-2 API format (localhost:8000)
+            const FormData = (await import('form-data')).default;
+            const formData = new FormData();
+
+            // Convert base64 to buffer
+            const imageBuffer = Buffer.from(screenshotBase64, 'base64');
+            formData.append('image_file', imageBuffer, {
+                filename: 'screenshot.png',
+                contentType: 'image/png',
+            });
+            formData.append('draw_boxes', 'true');
+
+            const response = await fetch(`${OMNIPARSER_API_URL}/analyze`, {
+                method: 'POST',
+                body: formData,
+                headers: formData.getHeaders(),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Florence-2 API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log(`🔍 Florence-2 found ${data.elements?.length || 0} UI elements`);
+
+            // Convert Florence-2 format to standard format
+            const elements = (data.elements || []).map((el, idx) => ({
+                id: idx,
+                text: el.label || el.text || `element_${idx}`,
+                type: el.type || 'ui_element',
+                bbox: el.bbox || el.coordinates || [el.x1, el.y1, el.x2, el.y2],
+                confidence: el.confidence || el.score || 1.0,
+            }));
+
+            return {
+                success: true,
+                elements,
+                labeledImage: data.image || data.labeled_image || null,
+            };
+        } else if (isReplicate) {
             // Replicate API format
             const response = await fetch(OMNIPARSER_API_URL, {
                 method: 'POST',
@@ -215,7 +257,7 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
                 throw new Error(`OmniParser failed: ${result.error || 'Unknown error'}`);
             }
         } else {
-            // Self-hosted OmniParser API (e.g., Docker container)
+            // Self-hosted OmniParser API (e.g., Docker container on port 7860)
             const response = await fetch(`${OMNIPARSER_API_URL}/process_image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -241,7 +283,7 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
             };
         }
     } catch (error) {
-        console.error('OmniParser Error:', error);
+        console.error('UI Detection Error:', error);
         return { success: false, error: error.message };
     }
 });
