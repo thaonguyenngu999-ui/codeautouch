@@ -184,8 +184,22 @@ export default function AIVisionAgent({ selectedDevice }) {
 
         switch (actionType) {
             case 'tap':
+                // Validate coordinates before scaling
+                if (params.x === undefined || params.y === undefined || isNaN(params.x) || isNaN(params.y)) {
+                    console.error('❌ Invalid tap coordinates:', params);
+                    addMessage('error', `Toa do khong hop le: x=${params.x}, y=${params.y}`);
+                    return;
+                }
+
                 // Scale coordinates from image to device
                 const { x, y } = scaleCoordinates(params.x, params.y);
+
+                // Double check after scaling
+                if (isNaN(x) || isNaN(y)) {
+                    console.error('❌ Scaled coordinates are NaN:', { x, y });
+                    addMessage('error', `Loi scale toa do: x=${x}, y=${y}`);
+                    return;
+                }
 
                 // Generate and run tap script
                 const tapScript = `
