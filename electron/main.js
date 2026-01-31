@@ -169,21 +169,17 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
 
         if (isLocalFlorence) {
             // Local Florence-2 API format (localhost:8000)
-            const FormData = (await import('form-data')).default;
-            const formData = new FormData();
-
-            // Convert base64 to buffer
+            // Use native FormData with Blob for proper multipart encoding
             const imageBuffer = Buffer.from(screenshotBase64, 'base64');
-            formData.append('image_file', imageBuffer, {
-                filename: 'screenshot.png',
-                contentType: 'image/png',
-            });
+            const blob = new Blob([imageBuffer], { type: 'image/png' });
+
+            const formData = new FormData();
+            formData.append('image_file', blob, 'screenshot.png');
             formData.append('draw_boxes', 'true');
 
             const response = await fetch(`${OMNIPARSER_API_URL}/analyze`, {
                 method: 'POST',
                 body: formData,
-                headers: formData.getHeaders(),
             });
 
             if (!response.ok) {
