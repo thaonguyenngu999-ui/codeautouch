@@ -199,39 +199,57 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
                 console.log(`📸 Trying download: ${dlUrl}`);
                 try {
                     const dlResp = await fetch(dlUrl);
-                    if (dlResp.ok) {
-                        const contentType = dlResp.headers.get('content-type') || '';
-                        console.log(`📸 Download response: ${dlResp.status}, type: ${contentType}`);
+                    const contentType = dlResp.headers.get('content-type') || '';
+                    console.log(`📸 Response: ${dlResp.status} ${dlResp.statusText}, type: ${contentType}`);
 
-                        // Check if binary image
-                        if (contentType.includes('image') || contentType.includes('octet')) {
-                            response = dlResp;
-                            console.log(`📸 Got binary image!`);
-                            break;
-                        }
+                    if (!dlResp.ok) {
+                        // Log error response body
+                        const errText = await dlResp.text().catch(() => '');
+                        console.log(`📸 Error body: ${errText.substring(0, 200)}`);
+                        continue;
+                    }
 
-                        // Check if JSON with content
-                        if (contentType.includes('json')) {
-                            const json = await dlResp.json();
-                            console.log(`📸 Got JSON:`, Object.keys(json));
-                            if (json.content) {
-                                // Content might be base64
-                                const imgBuffer = Buffer.from(json.content, 'base64');
-                                if (imgBuffer[0] === 0x89 || imgBuffer[0] === 0xFF) {
-                                    // Create fake response with buffer
-                                    response = {
-                                        ok: true,
-                                        _buffer: imgBuffer,
-                                        headers: { get: () => 'image/png' }
-                                    };
-                                    console.log(`📸 Decoded base64 from JSON!`);
-                                    break;
-                                }
+                    // Check if binary image
+                    if (contentType.includes('image') || contentType.includes('octet')) {
+                        response = dlResp;
+                        console.log(`📸 Got binary image!`);
+                        break;
+                    }
+
+                    // Try to read as buffer and check magic bytes
+                    const arrayBuffer = await dlResp.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuffer);
+                    console.log(`📸 Got ${buffer.length} bytes, first 8: ${buffer.slice(0, 8).toString('hex')}`);
+
+                    // Check if it's actually an image
+                    if (buffer[0] === 0x89 && buffer[1] === 0x50) {
+                        // PNG
+                        response = { ok: true, _buffer: buffer, headers: { get: () => 'image/png' } };
+                        console.log(`📸 Detected PNG image!`);
+                        break;
+                    } else if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+                        // JPEG
+                        response = { ok: true, _buffer: buffer, headers: { get: () => 'image/jpeg' } };
+                        console.log(`📸 Detected JPEG image!`);
+                        break;
+                    }
+
+                    // Check if JSON with content
+                    if (contentType.includes('json')) {
+                        const jsonStr = buffer.toString('utf8');
+                        const json = JSON.parse(jsonStr);
+                        console.log(`📸 Got JSON:`, Object.keys(json));
+                        if (json.content) {
+                            const imgBuffer = Buffer.from(json.content, 'base64');
+                            if (imgBuffer[0] === 0x89 || imgBuffer[0] === 0xFF) {
+                                response = { ok: true, _buffer: imgBuffer, headers: { get: () => 'image/png' } };
+                                console.log(`📸 Decoded base64 from JSON!`);
+                                break;
                             }
                         }
                     }
                 } catch (e) {
-                    console.log(`📸 Download failed: ${e.message}`);
+                    console.log(`📸 Download error: ${e.message}`);
                 }
             }
         }
