@@ -101,6 +101,14 @@ export default function AIVisionAgent({ selectedDevice }) {
                 console.log(`📸 Captured from VNC canvas: ${vncCanvas.width}x${vncCanvas.height}`);
 
                 setScreenshot(dataUrl);
+
+                // Debug: Auto-download screenshot for testing Florence-2
+                const link = document.createElement('a');
+                link.href = dataUrl;
+                link.download = `debug_screenshot_${Date.now()}.jpg`;
+                link.click(); // Auto-download enabled
+                console.log('📸 Screenshot auto-downloaded for testing');
+
                 return {
                     success: true,
                     base64,

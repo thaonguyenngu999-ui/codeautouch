@@ -188,13 +188,53 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
             }
 
             const data = await response.json();
-            console.log(`🔍 Florence-2 raw response:`, JSON.stringify(data, null, 2));
-            console.log(`🔍 Florence-2 found ${data.elements?.length || 0} UI elements`);
+            console.log(`🔍 Florence-2 raw response keys:`, Object.keys(data));
+            console.log(`🔍 Florence-2 raw response:`, JSON.stringify(data, null, 2).substring(0, 2000));
+
+            // Check various possible response formats from Florence-2
+            let rawElements = data.elements || data.results || data.detections || data.objects || data.annotations || [];
+
+            // Handle format where bboxes and labels are separate arrays
+            // e.g., { "bboxes": [[x1,y1,x2,y2], ...], "labels": ["button", ...] }
+            if (rawElements.length === 0 && Array.isArray(data.bboxes) && data.bboxes.length > 0) {
+                console.log(`🔍 Found separate bboxes array with ${data.bboxes.length} items`);
+                const labels = data.labels || data.texts || [];
+                rawElements = data.bboxes.map((bbox, i) => ({
+                    bbox: bbox,
+                    label: labels[i] || `element_${i}`,
+                }));
+            }
+
+            // If response has a nested structure, try to find elements
+            if (rawElements.length === 0 && typeof data === 'object') {
+                for (const key of Object.keys(data)) {
+                    if (Array.isArray(data[key]) && data[key].length > 0) {
+                        console.log(`🔍 Found array in key '${key}' with ${data[key].length} items`);
+                        // Check if it's an array of arrays (bboxes) or array of objects
+                        if (Array.isArray(data[key][0]) && data[key][0].length === 4) {
+                            // It's an array of bboxes like [[x1,y1,x2,y2], ...]
+                            rawElements = data[key].map((bbox, i) => ({
+                                bbox: bbox,
+                                label: `element_${i}`,
+                            }));
+                        } else {
+                            rawElements = data[key];
+                        }
+                        break;
+                    }
+                }
+            }
+
+            console.log(`🔍 Florence-2 found ${rawElements.length} raw elements`);
+            if (rawElements.length > 0) {
+                console.log(`🔍 First element sample:`, JSON.stringify(rawElements[0]));
+            }
 
             // Convert Florence-2 format to standard format
             // Handle both normalized (0-1) and pixel coordinates
-            const elements = (data.elements || []).map((el, idx) => {
-                let bbox = el.bbox || el.coordinates || el.box || [el.x1, el.y1, el.x2, el.y2];
+            const elements = rawElements.map((el, idx) => {
+                // Handle if el is just an array (bbox directly)
+                let bbox = Array.isArray(el) ? el : (el.bbox || el.coordinates || el.box || [el.x1, el.y1, el.x2, el.y2]);
 
                 // If coordinates look normalized (all values between 0-1), convert to pixels
                 // Assume image is 750x1334 (standard iPhone)
