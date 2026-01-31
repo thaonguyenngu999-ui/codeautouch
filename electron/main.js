@@ -171,8 +171,55 @@ ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
             }
         }
 
+        // Fallback: Use Lua script to capture screenshot and download it
         if (!response) {
-            throw new Error(`Screenshot capture failed. AutoTouch API may not support screenshot endpoint. Device: ${deviceIp}`);
+            console.log(`📸 HTTP endpoints failed. Trying Lua script fallback...`);
+
+            const apiPort = 8080;
+            const tempScreenshotPath = '/var/mobile/Library/AutoTouch/Screenshots/_ai_temp_screenshot.png';
+
+            // Step 1: Create and run screenshot script
+            const screenshotScript = `screenshot("${tempScreenshotPath}")`;
+            const scriptName = '_ai_screenshot_temp';
+            const remotePath = '/var/mobile/Library/AutoTouch/Scripts';
+            const scriptFilePath = `${remotePath}/${scriptName}.lua`;
+
+            try {
+                // Create script file
+                const createUrl = `http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(scriptFilePath)}`;
+                await fetch(createUrl);
+
+                // Update script content
+                const updateUrl = `http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptFilePath)}`;
+                await fetch(updateUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `content=${encodeURIComponent(screenshotScript)}`,
+                });
+
+                // Run the script
+                const playUrl = `http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptFilePath)}`;
+                await fetch(playUrl);
+
+                // Wait for screenshot to be taken
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Download the screenshot file
+                const downloadUrl = `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempScreenshotPath)}`;
+                console.log(`📸 Downloading screenshot from: ${downloadUrl}`);
+                const downloadResp = await fetch(downloadUrl);
+
+                if (downloadResp.ok) {
+                    response = downloadResp;
+                    console.log(`📸 Lua fallback succeeded!`);
+                }
+            } catch (luaError) {
+                console.error(`📸 Lua fallback failed:`, luaError.message);
+            }
+        }
+
+        if (!response) {
+            throw new Error(`Screenshot capture failed. Device: ${deviceIp}. Check AutoTouch is running.`);
         }
 
         const contentType = response.headers.get('content-type');
