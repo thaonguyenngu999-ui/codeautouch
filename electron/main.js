@@ -129,97 +129,61 @@ ipcMain.handle('call-grok-vision', async (event, { screenshotBase64, userPrompt,
 // IPC Handler to capture screenshot from device
 ipcMain.handle('capture-device-screenshot', async (event, { deviceIp }) => {
     try {
-        // Try multiple ports and endpoint combinations
-        const portsToTry = [8080, 8081, 80];
-        const endpointsToTry = [
-            '/screenshot',
-            '/screen',
-            '/control/screenshot',
-            '/control/screenshot?format=png',
-            '/control/screenshot?format=jpg',
-            '/control/capture',
-            '/screen/capture',
-            '/api/screenshot',
+        const apiPort = 8080;
+        let response = null;
+
+        // Quick try: Only 2 common endpoints with fast timeout
+        const quickUrls = [
+            `http://${deviceIp}:${apiPort}/screenshot`,
+            `http://${deviceIp}:${apiPort}/control/screenshot`,
         ];
 
-        let response = null;
-        let screenshotUrl = '';
-
-        // Try each port and endpoint combination
-        outerLoop:
-        for (const port of portsToTry) {
-            for (const endpoint of endpointsToTry) {
-                const url = `http://${deviceIp}:${port}${endpoint}`;
-                console.log(`📸 Trying: ${url}`);
-                try {
-                    const resp = await fetch(url, { timeout: 3000 });
-                    if (resp.ok) {
-                        // Check if it's actually image data
-                        const contentType = resp.headers.get('content-type') || '';
-                        if (contentType.includes('image') || contentType.includes('octet')) {
-                            response = resp;
-                            screenshotUrl = url;
-                            console.log(`📸 Success with URL: ${url} (${contentType})`);
-                            break outerLoop;
-                        } else {
-                            console.log(`📸 Got 200 but not image: ${contentType}`);
-                        }
-                    }
-                } catch (e) {
-                    // Silently continue to next URL
-                }
-            }
-        }
-
-        // Fallback: Use Lua script to capture screenshot and download it
-        if (!response) {
-            console.log(`📸 HTTP endpoints failed. Trying Lua script fallback...`);
-
-            const apiPort = 8080;
-            const tempScreenshotPath = '/var/mobile/Library/AutoTouch/Screenshots/_ai_temp_screenshot.png';
-
-            // Step 1: Create and run screenshot script
-            const screenshotScript = `screenshot("${tempScreenshotPath}")`;
-            const scriptName = '_ai_screenshot_temp';
-            const remotePath = '/var/mobile/Library/AutoTouch/Scripts';
-            const scriptFilePath = `${remotePath}/${scriptName}.lua`;
-
+        for (const url of quickUrls) {
             try {
-                // Create script file
-                const createUrl = `http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(scriptFilePath)}`;
-                await fetch(createUrl);
-
-                // Update script content
-                const updateUrl = `http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptFilePath)}`;
-                await fetch(updateUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `content=${encodeURIComponent(screenshotScript)}`,
-                });
-
-                // Run the script
-                const playUrl = `http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptFilePath)}`;
-                await fetch(playUrl);
-
-                // Wait for screenshot to be taken
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                // Download the screenshot file
-                const downloadUrl = `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempScreenshotPath)}`;
-                console.log(`📸 Downloading screenshot from: ${downloadUrl}`);
-                const downloadResp = await fetch(downloadUrl);
-
-                if (downloadResp.ok) {
-                    response = downloadResp;
-                    console.log(`📸 Lua fallback succeeded!`);
+                console.log(`📸 Trying: ${url}`);
+                const resp = await fetch(url, { signal: AbortSignal.timeout(1500) });
+                if (resp.ok) {
+                    const contentType = resp.headers.get('content-type') || '';
+                    if (contentType.includes('image') || contentType.includes('octet')) {
+                        response = resp;
+                        console.log(`📸 HTTP screenshot OK!`);
+                        break;
+                    }
                 }
-            } catch (luaError) {
-                console.error(`📸 Lua fallback failed:`, luaError.message);
+            } catch (e) {
+                // Continue to next
+            }
+        }
+
+        // Lua script fallback (more reliable)
+        if (!response) {
+            console.log(`📸 Using Lua fallback...`);
+
+            const tempPath = '/var/mobile/Library/AutoTouch/Screenshots/_ai_temp.png';
+            const scriptPath = '/var/mobile/Library/AutoTouch/Scripts/_ai_ss.lua';
+
+            // Upload & run screenshot script
+            await fetch(`http://${deviceIp}:${apiPort}/file/new?path=${encodeURIComponent(scriptPath)}`).catch(() => {});
+            await fetch(`http://${deviceIp}:${apiPort}/file/update?path=${encodeURIComponent(scriptPath)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `content=${encodeURIComponent(`screenshot("${tempPath}")`)}`,
+            });
+            await fetch(`http://${deviceIp}:${apiPort}/control/start_playing?path=${encodeURIComponent(scriptPath)}`);
+
+            // Wait then download
+            await new Promise(r => setTimeout(r, 800));
+            const dlUrl = `http://${deviceIp}:${apiPort}/file/read?path=${encodeURIComponent(tempPath)}`;
+            console.log(`📸 Downloading from Lua...`);
+            const dlResp = await fetch(dlUrl);
+            if (dlResp.ok) {
+                response = dlResp;
+                console.log(`📸 Lua screenshot OK!`);
             }
         }
 
         if (!response) {
-            throw new Error(`Screenshot capture failed. Device: ${deviceIp}. Check AutoTouch is running.`);
+            throw new Error(`Screenshot failed on ${deviceIp}`);
         }
 
         const contentType = response.headers.get('content-type');
