@@ -176,6 +176,10 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
             const formData = new FormData();
             formData.append('image_file', blob, 'screenshot.png');
             formData.append('draw_boxes', 'true');
+            // Try adding task parameter for UI element detection
+            formData.append('task', '<OD>');  // Object Detection task
+
+            console.log(`🔍 Calling Florence-2 at ${OMNIPARSER_API_URL}/analyze...`);
 
             const response = await fetch(`${OMNIPARSER_API_URL}/analyze`, {
                 method: 'POST',
@@ -189,13 +193,21 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
 
             const data = await response.json();
             console.log(`🔍 Florence-2 raw response keys:`, Object.keys(data));
+            console.log(`🔍 Florence-2 response type check:`, {
+                hasElements: 'elements' in data,
+                elementsType: typeof data.elements,
+                elementsIsArray: Array.isArray(data.elements),
+                elementsLength: data.elements?.length,
+                hasAnnotatedImage: 'annotated_image' in data,
+                hasImageWidth: 'image_width' in data,
+            });
 
             // Don't log annotated_image (too large), log other fields
             const logData = { ...data };
             if (logData.annotated_image) {
                 logData.annotated_image = `[base64 string, ${logData.annotated_image.length} chars]`;
             }
-            console.log(`🔍 Florence-2 raw response:`, JSON.stringify(logData, null, 2));
+            console.log(`🔍 Florence-2 full response (minus image):`, JSON.stringify(logData, null, 2));
 
             // According to OpenAPI spec, response format is:
             // {
