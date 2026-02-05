@@ -189,84 +189,65 @@ ipcMain.handle('call-omniparser', async (event, { screenshotBase64, targetElemen
 
             const data = await response.json();
             console.log(`🔍 Florence-2 raw response keys:`, Object.keys(data));
-            console.log(`🔍 Florence-2 raw response:`, JSON.stringify(data, null, 2).substring(0, 2000));
 
-            // Check various possible response formats from Florence-2
-            let rawElements = data.elements || data.results || data.detections || data.objects || data.annotations || [];
-
-            // Handle format where bboxes and labels are separate arrays
-            // e.g., { "bboxes": [[x1,y1,x2,y2], ...], "labels": ["button", ...] }
-            if (rawElements.length === 0 && Array.isArray(data.bboxes) && data.bboxes.length > 0) {
-                console.log(`🔍 Found separate bboxes array with ${data.bboxes.length} items`);
-                const labels = data.labels || data.texts || [];
-                rawElements = data.bboxes.map((bbox, i) => ({
-                    bbox: bbox,
-                    label: labels[i] || `element_${i}`,
-                }));
+            // Don't log annotated_image (too large), log other fields
+            const logData = { ...data };
+            if (logData.annotated_image) {
+                logData.annotated_image = `[base64 string, ${logData.annotated_image.length} chars]`;
             }
+            console.log(`🔍 Florence-2 raw response:`, JSON.stringify(logData, null, 2));
 
-            // If response has a nested structure, try to find elements
-            if (rawElements.length === 0 && typeof data === 'object') {
-                for (const key of Object.keys(data)) {
-                    if (Array.isArray(data[key]) && data[key].length > 0) {
-                        console.log(`🔍 Found array in key '${key}' with ${data[key].length} items`);
-                        // Check if it's an array of arrays (bboxes) or array of objects
-                        if (Array.isArray(data[key][0]) && data[key][0].length === 4) {
-                            // It's an array of bboxes like [[x1,y1,x2,y2], ...]
-                            rawElements = data[key].map((bbox, i) => ({
-                                bbox: bbox,
-                                label: `element_${i}`,
-                            }));
-                        } else {
-                            rawElements = data[key];
-                        }
-                        break;
-                    }
-                }
-            }
+            // According to OpenAPI spec, response format is:
+            // {
+            //   "elements": [{"label": "string", "x": 0, "y": 0, "width": 0, "height": 0, "center_x": 0, "center_y": 0}],
+            //   "image_width": 0, "image_height": 0,
+            //   "annotated_image": "base64..."
+            // }
+            const rawElements = data.elements || [];
+            const imgWidth = data.image_width || 750;
+            const imgHeight = data.image_height || 1334;
 
-            console.log(`🔍 Florence-2 found ${rawElements.length} raw elements`);
+            console.log(`🔍 Florence-2 found ${rawElements.length} elements, image: ${imgWidth}x${imgHeight}`);
             if (rawElements.length > 0) {
                 console.log(`🔍 First element sample:`, JSON.stringify(rawElements[0]));
             }
 
             // Convert Florence-2 format to standard format
-            // Handle both normalized (0-1) and pixel coordinates
+            // Each element has: label, x, y, width, height, center_x, center_y
             const elements = rawElements.map((el, idx) => {
-                // Handle if el is just an array (bbox directly)
-                let bbox = Array.isArray(el) ? el : (el.bbox || el.coordinates || el.box || [el.x1, el.y1, el.x2, el.y2]);
+                // Use center_x and center_y directly (API already provides them!)
+                const centerX = el.center_x;
+                const centerY = el.center_y;
 
-                // If coordinates look normalized (all values between 0-1), convert to pixels
-                // Assume image is 750x1334 (standard iPhone)
-                if (bbox && bbox.length >= 4) {
-                    const [x1, y1, x2, y2] = bbox;
-                    if (x1 <= 1 && y1 <= 1 && x2 <= 1 && y2 <= 1) {
-                        // Normalized coordinates - convert to pixels
-                        const imgWidth = 750;
-                        const imgHeight = 1334;
-                        bbox = [
-                            Math.round(x1 * imgWidth),
-                            Math.round(y1 * imgHeight),
-                            Math.round(x2 * imgWidth),
-                            Math.round(y2 * imgHeight),
-                        ];
-                        console.log(`📐 Converted normalized bbox to pixels:`, bbox);
-                    }
-                }
+                // Create bbox from x, y, width, height
+                const bbox = [
+                    el.x,                    // x1
+                    el.y,                    // y1
+                    el.x + el.width,         // x2
+                    el.y + el.height,        // y2
+                ];
+
+                console.log(`📍 Element ${idx}: "${el.label}" center=(${centerX}, ${centerY}) bbox=[${bbox.join(',')}]`);
 
                 return {
                     id: idx,
-                    text: el.label || el.text || el.description || `element_${idx}`,
-                    type: el.type || 'ui_element',
+                    text: el.label || `element_${idx}`,
+                    type: 'ui_element',
                     bbox: bbox,
-                    confidence: el.confidence || el.score || 1.0,
+                    centerX: centerX,  // Store center directly
+                    centerY: centerY,  // Store center directly
+                    width: el.width,
+                    height: el.height,
+                    confidence: 1.0,
                 };
             });
 
             return {
                 success: true,
                 elements,
-                labeledImage: data.image || data.labeled_image || null,
+                imageWidth: imgWidth,
+                imageHeight: imgHeight,
+                labeledImage: data.annotated_image || null,
             };
         } else if (isReplicate) {
             // Replicate API format

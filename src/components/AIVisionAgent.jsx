@@ -102,12 +102,12 @@ export default function AIVisionAgent({ selectedDevice }) {
 
                 setScreenshot(dataUrl);
 
-                // Debug: Auto-download screenshot for testing Florence-2
-                const link = document.createElement('a');
-                link.href = dataUrl;
-                link.download = `debug_screenshot_${Date.now()}.jpg`;
-                link.click(); // Auto-download enabled
-                console.log('📸 Screenshot auto-downloaded for testing');
+                // Debug: Auto-download screenshot (disabled in production)
+                // const link = document.createElement('a');
+                // link.href = dataUrl;
+                // link.download = `debug_screenshot_${Date.now()}.jpg`;
+                // link.click();
+                // console.log('📸 Screenshot auto-downloaded for testing');
 
                 return {
                     success: true,
@@ -346,8 +346,15 @@ touchUp(1, endX, endY)
                         // Build element list for LLM
                         elementsPrompt = `\n\n[DETECTED UI ELEMENTS - Chon element_id de tap chinh xac]\n`;
                         detectedElements.forEach((el, idx) => {
-                            const center = getBboxCenter(el.bbox);
-                            elementsPrompt += `[${idx}] "${el.text || el.type || 'element'}" - center: (${center?.x}, ${center?.y})\n`;
+                            // Use centerX/centerY directly from API, or fallback to bbox calculation
+                            let cx = el.centerX;
+                            let cy = el.centerY;
+                            if (cx === undefined || cy === undefined) {
+                                const center = getBboxCenter(el.bbox);
+                                cx = center?.x;
+                                cy = center?.y;
+                            }
+                            elementsPrompt += `[${idx}] "${el.text || el.type || 'element'}" - center: (${Math.round(cx)}, ${Math.round(cy)})\n`;
                         });
                         elementsPrompt += `\nNeu tap, tra ve CA element_id VA x,y (de backup). VD: {"action":"tap","params":{"element_id":5,"x":375,"y":600}}`;
                         addMessage('system', `Tim thay ${detectedElements.length} UI elements`);
@@ -395,21 +402,26 @@ touchUp(1, endX, endY)
                     const element = detectedElements[elementId];
                     console.log(`🔍 Element[${elementId}]:`, element);
 
-                    if (element?.bbox) {
+                    // Use centerX/centerY directly from API (more accurate), or fallback to bbox calculation
+                    let centerX = element?.centerX;
+                    let centerY = element?.centerY;
+
+                    // Fallback to bbox calculation if centerX/centerY not available
+                    if ((centerX === undefined || centerY === undefined) && element?.bbox) {
                         const center = getBboxCenter(element.bbox);
-                        // Only use OmniParser coords if they're valid numbers
-                        if (center && !isNaN(center.x) && !isNaN(center.y) && center.x > 0 && center.y > 0) {
-                            parsed.params.x = center.x;
-                            parsed.params.y = center.y;
-                            addMessage('system', `🎯 OmniParser: element[${elementId}] → (${center.x}, ${center.y})`);
-                        } else {
-                            console.warn(`⚠️ Invalid bbox center for element[${elementId}]:`, center, 'bbox:', element.bbox);
-                            addMessage('system', `⚠️ OmniParser bbox invalid, using Grok coordinates`);
-                            // Don't modify params - let Grok's coordinates be used
-                        }
+                        centerX = center?.x;
+                        centerY = center?.y;
+                    }
+
+                    // Only use coords if they're valid numbers
+                    if (centerX !== undefined && centerY !== undefined && !isNaN(centerX) && !isNaN(centerY) && centerX > 0 && centerY > 0) {
+                        parsed.params.x = Math.round(centerX);
+                        parsed.params.y = Math.round(centerY);
+                        addMessage('system', `🎯 OmniParser: element[${elementId}] → (${parsed.params.x}, ${parsed.params.y})`);
                     } else {
-                        console.warn(`⚠️ Element[${elementId}] has no bbox:`, element);
-                        addMessage('system', `⚠️ Element has no bbox, using Grok coordinates`);
+                        console.warn(`⚠️ Invalid coords for element[${elementId}]:`, { centerX, centerY, element });
+                        addMessage('system', `⚠️ OmniParser coords invalid, using Grok coordinates`);
+                        // Don't modify params - let Grok's coordinates be used
                     }
                 }
 
