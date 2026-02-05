@@ -22,8 +22,8 @@ export default function AIVisionAgent({ selectedDevice }) {
         { value: 'qwen-coder', label: 'Qwen Coder' },
     ];
 
-    // OmniParser mode - use precise bounding boxes from UI detection (default ON)
-    const [useOmniParser, setUseOmniParser] = useState(true);
+    // OmniParser mode - use precise bounding boxes from UI detection (default OFF - requires Florence-2 server)
+    const [useOmniParser, setUseOmniParser] = useState(false);
     const [omniElements, setOmniElements] = useState([]);
 
     // Store image and device dimensions for coordinate scaling
