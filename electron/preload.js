@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // xAI API
     callXaiApi: (messages, systemPrompt) => ipcRenderer.invoke('call-xai-api', messages, systemPrompt),
 
+    // Grok Vision API
+    callGrokVision: (config) => ipcRenderer.invoke('call-grok-vision', config),
+    captureDeviceScreenshot: (config) => ipcRenderer.invoke('capture-device-screenshot', config),
+
+    // OmniParser API (UI element detection)
+    callOmniParser: (config) => ipcRenderer.invoke('call-omniparser', config),
+
     // VNC API
     startVncProxy: (config) => ipcRenderer.invoke('start-vnc-proxy', config),
     stopVncProxy: (config) => ipcRenderer.invoke('stop-vnc-proxy', config),

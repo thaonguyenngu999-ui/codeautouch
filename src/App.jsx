@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import ManageIPTab from './components/ManageIP/ManageIPTab';
 import ScriptEditorTab from './components/ScriptEditor/ScriptEditorTab';
+import AIVisionAgent from './components/AIVisionAgent';
 
 function App() {
     const [activeTab, setActiveTab] = useState('manageip');
+    const [selectedDevice, setSelectedDevice] = useState(null);
 
     return (
         <div className="app">
@@ -32,15 +34,30 @@ function App() {
                     <span className="tab-icon">🔗</span>
                     Script Editor
                 </button>
+                <button
+                    className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('ai')}
+                >
+                    <span className="tab-icon">🤖</span>
+                    AI Vision
+                </button>
             </div>
 
             {/* Main Content */}
             <div className="main-content">
-                {activeTab === 'manageip' && <ManageIPTab />}
+                {activeTab === 'manageip' && (
+                    <ManageIPTab
+                        onDeviceSelect={setSelectedDevice}
+                        selectedDevice={selectedDevice}
+                    />
+                )}
                 {activeTab === 'script' && (
                     <ReactFlowProvider>
-                        <ScriptEditorTab />
+                        <ScriptEditorTab selectedDevice={selectedDevice} />
                     </ReactFlowProvider>
+                )}
+                {activeTab === 'ai' && (
+                    <AIVisionAgent selectedDevice={selectedDevice} />
                 )}
             </div>
 
